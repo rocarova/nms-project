@@ -1,0 +1,118 @@
+{% extends 'system_management/base.html' %}
+
+{% block title %}Add switch{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="page-eyebrow"><a href="{% url 'inventory' %}" class="text-decoration-none">Inventory</a> <i class="bi bi-chevron-right small"></i> New</div>
+        <h1 class="page-title">Add switch</h1>
+        <p class="page-subtitle">Register a network device so it can be monitored, backed up and managed over SSH</p>
+    </div>
+    <a href="{% url 'inventory' %}" class="btn-ghost"><i class="bi bi-arrow-left"></i> Back to inventory</a>
+</div>
+
+<div class="row g-3 align-items-start">
+    <div class="col-xl-8">
+        <form method="POST" class="panel custom-device-form" novalidate>
+            {% csrf_token %}
+
+            {% for error in form.non_field_errors %}
+            <div class="alert-nms m-3 mb-0" role="alert"><i class="bi bi-exclamation-triangle-fill"></i> <span>{{ error }}</span></div>
+            {% endfor %}
+
+            <section class="form-section">
+                <div class="section-head">
+                    <span class="section-icon"><i class="bi bi-hdd-network"></i></span>
+                    <div>
+                        <h2 class="section-title">Device</h2>
+                        <p class="section-subtitle">How the switch is identified and reached on the network</p>
+                    </div>
+                </div>
+                <div class="form-grid">
+                    {% include 'inventory/_field.html' with field=form.hostname icon='tag' %}
+                    {% include 'inventory/_field.html' with field=form.ip_address icon='globe2' %}
+                </div>
+            </section>
+
+            <section class="form-section">
+                <div class="section-head">
+                    <span class="section-icon"><i class="bi bi-diagram-3"></i></span>
+                    <div>
+                        <h2 class="section-title">Classification</h2>
+                        <p class="section-subtitle">Group the switch by manufacturer and site</p>
+                    </div>
+                </div>
+                <div class="form-grid">
+                    {% url 'add_vendor' as add_vendor_url %}
+                    {% url 'add_location' as add_location_url %}
+                    {% include 'inventory/_field.html' with field=form.vendor icon='building' add_url=add_vendor_url %}
+                    {% include 'inventory/_field.html' with field=form.location icon='geo-alt' add_url=add_location_url %}
+                </div>
+            </section>
+
+            <section class="form-section">
+                <div class="section-head">
+                    <span class="section-icon"><i class="bi bi-key"></i></span>
+                    <div>
+                        <h2 class="section-title">SSH credentials</h2>
+                        <p class="section-subtitle">Used by the SSH console and, soon, configuration backups</p>
+                    </div>
+                </div>
+                <div class="form-grid">
+                    {% include 'inventory/_field.html' with field=form.username icon='person' %}
+                    {% include 'inventory/_field.html' with field=form.password icon='lock' %}
+                </div>
+            </section>
+
+            <section class="form-section">
+                <label class="toggle-row" for="{{ form.enabled.id_for_label }}">
+                    <span>
+                        <span class="toggle-title">Enabled</span>
+                        <span class="toggle-desc">Include this switch in monitoring and backups</span>
+                    </span>
+                    <span class="form-check form-switch m-0">
+                        <input class="form-check-input" type="checkbox" role="switch" name="{{ form.enabled.html_name }}"
+                               id="{{ form.enabled.id_for_label }}" {% if form.enabled.value %}checked{% endif %}>
+                    </span>
+                </label>
+            </section>
+
+            <div class="form-footer">
+                <a href="{% url 'inventory' %}" class="btn-ghost">Cancel</a>
+                <button type="submit" class="btn-accent"><i class="bi bi-check2"></i> Register switch</button>
+            </div>
+        </form>
+    </div>
+
+    <div class="col-xl-4">
+        <div class="panel">
+            <div class="panel-header">
+                <div>
+                    <h2 class="panel-title"><i class="bi bi-lightbulb me-2" style="color: var(--warning)"></i>Before you add</h2>
+                    <p class="panel-subtitle">Get the switch ready for NetOps Center</p>
+                </div>
+            </div>
+            <div class="panel-body">
+                <ol class="checklist">
+                    <li>
+                        <span class="step">1</span>
+                        <div><strong>Enable SSH</strong> on the switch and create a local user for NetOps Center.</div>
+                    </li>
+                    <li>
+                        <span class="step">2</span>
+                        <div><strong>Send syslog</strong> to this server so config changes show up on the dashboard:
+                            <pre class="snippet">logging host {{ server_ip }}{% if system_settings.syslog_port != 514 %} transport udp port {{ system_settings.syslog_port }}{% endif %}
+logging trap informational</pre>
+                        </div>
+                    </li>
+                    <li>
+                        <span class="step">3</span>
+                        <div><strong>Use the management IP</strong>, the one the switch sends syslog from, so its logs are matched to it.</div>
+                    </li>
+                </ol>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

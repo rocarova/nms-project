@@ -1,0 +1,23 @@
+{% comment %}One settings form field. Checkboxes render as a toggle row; everything else as label + input. Optional: icon, hint.{% endcomment %}
+{% if field.field.widget.input_type == 'checkbox' %}
+<label class="toggle-row" for="{{ field.id_for_label }}">
+    <span>
+        <span class="toggle-title">{{ field.label }}</span>
+        {% if hint %}<span class="toggle-desc">{{ hint }}</span>{% endif %}
+    </span>
+    <span class="form-check form-switch m-0">
+        <input class="form-check-input" type="checkbox" role="switch" name="{{ field.html_name }}" id="{{ field.id_for_label }}"{% if field.value %} checked{% endif %}>
+    </span>
+</label>
+{% else %}
+<div class="field-container{% if field.errors %} has-error{% endif %}">
+    <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+    {% if icon %}
+    <div class="input-icon"><i class="bi bi-{{ icon }}"></i>{{ field }}</div>
+    {% else %}
+    {{ field }}
+    {% endif %}
+    {% if hint %}<small class="helptext">{{ hint }}</small>{% elif field.help_text %}<small class="helptext">{{ field.help_text|safe }}</small>{% endif %}
+    {% for error in field.errors %}<div class="field-error">{{ error }}</div>{% endfor %}
+</div>
+{% endif %}

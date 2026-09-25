@@ -1,0 +1,5 @@
+# Normalize line endings so files developed on Windows work on the Linux server
+* text=auto eol=lf
+*.png binary
+*.jpg binary
+*.ico binary

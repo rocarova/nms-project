@@ -1,0 +1,21 @@
+{% comment %}Renders one form field with a leading icon. Params: field, icon (bootstrap-icons name), add_url (optional "+" link).{% endcomment %}
+<div class="field-container{% if field.errors %} has-error{% endif %}">
+    <label for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %}<span class="req" aria-hidden="true">*</span>{% endif %}</label>
+    <div class="input-group-custom">
+        <div class="input-icon flex-grow-1">
+            <i class="bi bi-{{ icon }}"></i>
+            {{ field }}
+            {% if field.name == 'password' %}
+            <button type="button" class="pw-toggle" aria-label="Show password" title="Show password"
+                    onclick="const i=this.previousElementSibling, show=i.type==='password'; i.type=show?'text':'password'; this.firstElementChild.className=show?'bi bi-eye-slash':'bi bi-eye'; this.setAttribute('aria-label', show?'Hide password':'Show password');">
+                <i class="bi bi-eye"></i>
+            </button>
+            {% endif %}
+        </div>
+        {% if add_url %}
+        <a href="{{ add_url }}" class="btn-add-inline" title="Add new {{ field.label|lower }}" aria-label="Add new {{ field.label|lower }}"><i class="bi bi-plus-lg"></i></a>
+        {% endif %}
+    </div>
+    {% if field.help_text %}<small class="helptext">{{ field.help_text }}</small>{% endif %}
+    {% for error in field.errors %}<div class="field-error">{{ error }}</div>{% endfor %}
+</div>

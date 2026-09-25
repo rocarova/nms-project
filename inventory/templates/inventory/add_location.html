@@ -1,0 +1,22 @@
+{% extends 'system_management/base.html' %}
+
+{% block title %}Add location{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="page-eyebrow">Inventory</div>
+        <h1 class="page-title">Add location</h1>
+        <p class="page-subtitle">Sites, buildings or closets where your switches live</p>
+    </div>
+    <a href="{% url 'add_device' %}" class="btn-ghost"><i class="bi bi-arrow-left"></i> Back to add switch</a>
+</div>
+
+<div class="panel device-form-card">
+    <form method="POST" class="custom-device-form" novalidate>
+        {% csrf_token %}
+        {% include 'inventory/_form_fields.html' %}
+        <button type="submit" class="btn-accent mt-2"><i class="bi bi-geo-alt"></i> Add location</button>
+    </form>
+</div>
+{% endblock %}

@@ -1,0 +1,90 @@
+{% extends 'system_management/base.html' %}
+
+{% block title %}Inventory{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="page-eyebrow">Manage</div>
+        <h1 class="page-title">Inventory</h1>
+        <p class="page-subtitle">{{ devices|length }} switch{{ devices|length|pluralize:"es" }} under management</p>
+    </div>
+    <a href="{% url 'add_device' %}" class="btn-accent"><i class="bi bi-plus-lg"></i> Add switch</a>
+</div>
+
+<div class="panel">
+    <div class="table-responsive">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Hostname</th>
+                    <th>IP address</th>
+                    <th>Vendor</th>
+                    <th>Location</th>
+                    <th>Status</th>
+                    <th>Last backup</th>
+                    <th class="text-end">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for device in devices %}
+                <tr>
+                    <td class="primary-cell">
+                        <a href="{% url 'device_backups' device.id %}" target="_blank" rel="noopener" class="host-link" title="Open {{ device.hostname }} backups in a new window">
+                            <i class="bi bi-hdd-network me-2"></i>{{ device.hostname }}<i class="bi bi-box-arrow-up-right ms-2 small"></i>
+                        </a>
+                    </td>
+                    <td><span class="ip-chip">{{ device.ip_address }}</span></td>
+                    <td>{{ device.vendor }}</td>
+                    <td><i class="bi bi-geo-alt me-1 text-muted-nms"></i>{{ device.location }}</td>
+                    <td>
+                        {% if device.enabled %}
+                        <span class="status is-good"><i class="bi bi-check-circle-fill"></i> Enabled</span>
+                        {% else %}
+                        <span class="status is-muted"><i class="bi bi-slash-circle"></i> Disabled</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if device.last_backup_status == 'success' %}
+                        <span class="status is-good"><i class="bi bi-shield-check"></i> <time data-time="{{ device.last_backup_at|date:'c' }}" data-format="relative"></time></span>
+                        {% elif device.last_backup_status == 'failed' %}
+                        <span class="status is-critical"><i class="bi bi-x-circle-fill"></i> Failed</span>
+                        {% else %}
+                        <span class="status is-muted"><i class="bi bi-dash-circle"></i> Never</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-end text-nowrap">
+                        <a href="{% url 'ssh_console' device.id %}" class="btn-icon btn-ssh" target="_blank" rel="noopener"
+                           data-window="ssh-{{ device.id }}" title="Open SSH console to {{ device.hostname }}" aria-label="Open SSH console to {{ device.hostname }}">
+                            <i class="bi bi-terminal"></i>
+                        </a>
+                        <a href="#" class="btn-icon" title="Edit (coming soon)" aria-disabled="true"><i class="bi bi-pencil"></i></a>
+                        <a href="#" class="btn-icon" title="Delete (coming soon)" aria-disabled="true"><i class="bi bi-trash"></i></a>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="7">
+                        <div class="empty-state">
+                            <i class="bi bi-hdd-rack"></i>
+                            <div class="title">No switches in the inventory</div>
+                            <a href="{% url 'add_device' %}">Add your first switch</a> to get started.
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Open each switch's console in its own window (clicking again focuses the existing one)
+    document.querySelectorAll('.btn-ssh').forEach(link => link.addEventListener('click', event => {
+        const win = window.open(link.href, link.dataset.window, 'width=1100,height=700,menubar=no,toolbar=no,location=no');
+        if (win) { event.preventDefault(); win.focus(); }
+    }));
+</script>
+{% endblock %}

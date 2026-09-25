@@ -1,0 +1,181 @@
+{% extends 'system_management/base.html' %}
+
+{% block title %}{{ device.hostname }} backups{% endblock %}
+
+{% block content %}
+<style>
+    .mini-stats { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 16px; }
+    .mini-stat { flex: 1 1 160px; padding: 14px 16px; }
+    .mini-stat .label { font-size: 0.78rem; color: var(--text-2); }
+    .mini-stat .value { font-size: 1.4rem; font-weight: 700; margin-top: 2px; }
+    .mini-stat .value.small-value { font-size: 1rem; font-weight: 600; margin-top: 6px; }
+
+    .history-table tbody tr.is-selectable { cursor: pointer; }
+    .history-table tbody tr.is-selected td { background: var(--accent-soft); }
+    .history-table input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--accent); cursor: pointer; }
+    .history-table .error-text { font-family: var(--font-mono); font-size: 0.76rem; color: var(--critical-bright); max-width: 360px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .hash { font-family: var(--font-mono); font-size: 0.78rem; color: var(--muted); }
+
+    .compare-bar {
+        position: sticky; bottom: 16px; z-index: 5; margin-top: 16px;
+        display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 12px 16px;
+        background: var(--surface-2); border: 1px solid var(--border-strong); border-radius: 12px;
+        box-shadow: 0 16px 40px rgba(0, 0, 0, 0.45);
+    }
+    .compare-bar .picks { display: flex; gap: 8px; flex-wrap: wrap; font-size: 0.85rem; color: var(--text-2); }
+    .compare-bar .pick { font-family: var(--font-mono); font-size: 0.78rem; padding: 3px 10px; border-radius: 999px; border: 1px dashed var(--border-strong); color: var(--muted); }
+    .compare-bar .pick.is-set { border-style: solid; border-color: rgba(34, 211, 238, 0.4); color: var(--text); background: var(--accent-soft); }
+    .btn-accent.is-disabled { opacity: 0.45; pointer-events: none; }
+</style>
+
+{% include 'backups/_device_header.html' with title='Configuration backups' back_url=inventory_url back_label='Inventory' %}
+
+<div class="mini-stats">
+    <div class="panel mini-stat"><div class="label">Backups stored</div><div class="value">{{ total }}</div></div>
+    <div class="panel mini-stat"><div class="label">Successful</div><div class="value">{{ success_count }}</div></div>
+    <div class="panel mini-stat"><div class="label">Config changes</div><div class="value">{{ change_count }}</div></div>
+    <div class="panel mini-stat">
+        <div class="label">Last successful backup</div>
+        <div class="value small-value">{% if last_success %}<time data-time="{{ last_success.created|date:'c' }}" data-format="relative"></time>{% else %}—{% endif %}</div>
+    </div>
+</div>
+
+<div class="panel">
+    <div class="panel-header">
+        <div>
+            <h2 class="panel-title">History</h2>
+            <p class="panel-subtitle">Tick two backups to compare them, or open one to see the full configuration</p>
+        </div>
+    </div>
+    {% if backups %}
+    <div class="table-responsive">
+        <table class="data-table history-table">
+            <thead>
+                <tr>
+                    <th style="width: 44px"><span class="visually-hidden">Select</span></th>
+                    <th>Taken</th>
+                    <th>Status</th>
+                    <th>Change</th>
+                    <th>Size</th>
+                    <th>Fingerprint</th>
+                    <th class="text-end">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for backup in backups %}
+                {% if backup.status == 'success' %}
+                <tr class="is-selectable" data-id="{{ backup.id }}" data-label="{{ backup.created|date:'c' }}">
+                    <td><input type="checkbox" class="pick-box" value="{{ backup.id }}" aria-label="Select backup from {{ backup.created }}"></td>
+                    <td class="primary-cell text-nowrap"><time data-time="{{ backup.created|date:'c' }}"></time>
+                        <div class="small text-muted-nms fw-normal"><time data-time="{{ backup.created|date:'c' }}" data-format="relative"></time></div>
+                    </td>
+                    <td><span class="status is-good"><i class="bi bi-check-circle-fill"></i> Success</span></td>
+                    <td>
+                        {% if backup.changed %}
+                        <span class="status is-warning"><i class="bi bi-arrow-left-right"></i> Changed</span>
+                        {% elif backup.previous_id %}
+                        <span class="text-muted-nms small">No change</span>
+                        {% else %}
+                        <span class="text-muted-nms small">First backup</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-nowrap">{{ backup.size|filesizeformat }}</td>
+                    <td><span class="hash" title="SHA-256 {{ backup.config_hash }}">{{ backup.config_hash|slice:":10"|default:"—" }}</span></td>
+                    <td class="text-end text-nowrap">
+                        <a href="{% url 'backup_detail' device.id backup.id %}" class="btn-icon" title="View configuration"><i class="bi bi-eye"></i></a>
+                        {% if backup.previous_id %}
+                        <a href="{% url 'backup_compare' device.id %}?a={{ backup.previous_id }}&b={{ backup.id }}" class="btn-icon" title="Compare with previous backup"><i class="bi bi-file-diff"></i></a>
+                        {% endif %}
+                        <a href="{% url 'backup_download' device.id backup.id %}" class="btn-icon" title="Download"><i class="bi bi-download"></i></a>
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td><input type="checkbox" disabled aria-label="Failed backups can't be compared"></td>
+                    <td class="primary-cell text-nowrap"><time data-time="{{ backup.created|date:'c' }}"></time>
+                        <div class="small text-muted-nms fw-normal"><time data-time="{{ backup.created|date:'c' }}" data-format="relative"></time></div>
+                    </td>
+                    <td><span class="status is-critical"><i class="bi bi-x-circle-fill"></i> Failed</span></td>
+                    <td colspan="3"><div class="error-text" title="{{ backup.error }}">{{ backup.error|default:"No error details" }}</div></td>
+                    <td></td>
+                </tr>
+                {% endif %}
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% if total > limit %}<div class="panel-body small text-muted-nms border-top" style="border-color: var(--border) !important;">Showing the {{ limit }} most recent of {{ total }} backups.</div>{% endif %}
+    {% else %}
+    <div class="empty-state">
+        <i class="bi bi-archive"></i>
+        <div class="title">No backups yet</div>
+        Backups for {{ device.hostname }} will appear here once the backup job runs.
+    </div>
+    {% endif %}
+</div>
+
+{% if backups %}
+<div class="compare-bar" id="compare-bar">
+    <i class="bi bi-file-diff" style="color: var(--accent)"></i>
+    <div class="picks">
+        <span class="pick" id="pick-a">Select a backup</span>
+        <i class="bi bi-arrow-right align-self-center"></i>
+        <span class="pick" id="pick-b">Select another</span>
+    </div>
+    <div class="ms-auto d-flex gap-2">
+        <button type="button" class="btn-ghost" id="clear-picks">Clear</button>
+        <a href="#" class="btn-accent is-disabled" id="compare-btn" aria-disabled="true"><i class="bi bi-file-diff"></i> Compare</a>
+    </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+(() => {
+    const compareUrl = "{% url 'backup_compare' device.id %}";
+    const boxes = [...document.querySelectorAll('.pick-box')];
+    const button = document.getElementById('compare-btn');
+    if (!button) return;
+    let picked = [];  // in click order; picking a third drops the oldest pick
+
+    function labelFor(id) {
+        const date = new Date(document.querySelector(`tr[data-id="${id}"]`).dataset.label);
+        return NMS.formatDateTime(date);
+    }
+
+    function render() {
+        boxes.forEach(box => {
+            box.checked = picked.includes(box.value);
+            box.closest('tr').classList.toggle('is-selected', box.checked);
+        });
+        // Show older -> newer, the order the comparison uses
+        const sorted = [...picked].sort((a, b) =>
+            new Date(document.querySelector(`tr[data-id="${a}"]`).dataset.label) - new Date(document.querySelector(`tr[data-id="${b}"]`).dataset.label));
+        ['pick-a', 'pick-b'].forEach((id, i) => {
+            const el = document.getElementById(id);
+            el.textContent = sorted[i] ? labelFor(sorted[i]) : (i ? 'Select another' : 'Select a backup');
+            el.classList.toggle('is-set', !!sorted[i]);
+        });
+        const ready = picked.length === 2;
+        button.classList.toggle('is-disabled', !ready);
+        button.setAttribute('aria-disabled', ready ? 'false' : 'true');
+        button.href = ready ? `${compareUrl}?a=${sorted[0]}&b=${sorted[1]}` : '#';
+    }
+
+    function toggle(id) {
+        picked = picked.includes(id) ? picked.filter(p => p !== id) : [...picked, id].slice(-2);
+        render();
+    }
+
+    boxes.forEach(box => box.addEventListener('click', event => { event.stopPropagation(); toggle(box.value); }));
+    // Clicking anywhere on a row (except its links) toggles selection too
+    document.querySelectorAll('tr.is-selectable').forEach(row => row.addEventListener('click', event => {
+        if (event.target.closest('a')) return;
+        toggle(row.dataset.id);
+    }));
+    document.getElementById('clear-picks').addEventListener('click', () => { picked = []; render(); });
+    render();
+})();
+</script>
+{% endblock %}

@@ -1,0 +1,21 @@
+{% for error in form.non_field_errors %}
+<div class="alert-nms" role="alert"><i class="bi bi-exclamation-triangle-fill"></i> <span>{{ error }}</span></div>
+{% endfor %}
+
+<div class="form-grid">
+    {% for field in form %}
+    <div class="field-container{% if field.name == 'description' %} grid-span-2{% endif %}">
+        <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+        <div class="input-group-custom">
+            {{ field }}
+            {% if field.name == 'vendor' or field.name == 'location' %}
+            <a href="{% url 'add_'|add:field.name %}" class="btn-add-inline" title="Add new {{ field.name }}" aria-label="Add new {{ field.name }}">
+                <i class="bi bi-plus-lg"></i>
+            </a>
+            {% endif %}
+        </div>
+        {% if field.help_text %}<small class="helptext">{{ field.help_text }}</small>{% endif %}
+        {% for error in field.errors %}<div class="field-error">{{ error }}</div>{% endfor %}
+    </div>
+    {% endfor %}
+</div>

@@ -1,0 +1,355 @@
+{% extends 'system_management/base.html' %}
+
+{% block title %}Syslog{% endblock %}
+
+{% block content %}
+<style>
+    .toolbar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; padding: 14px; }
+    .search-field { position: relative; flex: 1 1 320px; }
+    .search-field > i { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: var(--muted); pointer-events: none; }
+    .search-field input { padding-left: 40px; padding-right: 76px; font-family: var(--font-mono); font-size: 0.86rem; }
+    .search-field kbd {
+        position: absolute; right: 10px; top: 50%; transform: translateY(-50%);
+        background: var(--surface-3); color: var(--muted); border: 1px solid var(--border-strong);
+        font-size: 0.7rem; padding: 2px 6px; border-radius: 5px;
+    }
+    .search-field.has-error input { border-color: var(--critical); box-shadow: 0 0 0 3px rgba(208, 59, 59, 0.15); }
+
+    .toggle-regex { font-family: var(--font-mono); font-weight: 600; min-width: 64px; justify-content: center; }
+    .toggle-regex[aria-pressed="true"] { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
+
+    .select-compact { width: auto; padding: 9px 34px 9px 12px; font-size: 0.86rem;
+        appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 16 16'%3E%3Cpath fill='%236b7c96' d='M1.6 5.2 8 11.2l6.4-6z'/%3E%3C/svg%3E");
+        background-repeat: no-repeat; background-position: right 12px center; }
+    .select-label { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted); font-weight: 600; margin-right: -2px; }
+
+    .refresh-progress { height: 2px; background: transparent; overflow: hidden; border-radius: 0 0 var(--radius) var(--radius); }
+    .refresh-progress span { display: block; height: 100%; width: 0; background: var(--accent); box-shadow: var(--accent-glow); }
+    .refresh-progress span.is-running { animation: countdown linear forwards; }
+    @keyframes countdown { from { width: 0; } to { width: 100%; } }
+
+    .search-error { color: var(--critical-bright); font-size: 0.8rem; padding: 0 14px 12px; }
+
+    .log-table td { padding: 10px 16px; vertical-align: top; }
+    .log-table th { padding: 10px 16px; position: sticky; top: 0; background: var(--surface); z-index: 1; }
+    .log-scroll { max-height: calc(100vh - 330px); min-height: 320px; overflow-y: auto; }
+    .log-time { font-family: var(--font-mono); font-size: 0.78rem; color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
+    .log-source .host { color: var(--text); font-weight: 600; font-size: 0.85rem; white-space: nowrap; }
+    .log-source .ip { font-family: var(--font-mono); font-size: 0.75rem; color: var(--muted); }
+    .log-message { font-family: var(--font-mono); font-size: 0.8rem; color: var(--text); word-break: break-word; line-height: 1.55; }
+    .log-message mark { background: rgba(250, 178, 25, 0.28); color: #fff; padding: 0 1px; border-radius: 2px; }
+    .log-table tr.is-new td { animation: flash-new 2.4s ease-out; }
+    @keyframes flash-new { from { background: rgba(34, 211, 238, 0.14); } to { background: transparent; } }
+
+    .sev { display: inline-flex; align-items: center; gap: 6px; font-size: 0.75rem; font-weight: 600; color: var(--text); white-space: nowrap; }
+    .sev::before { content: ''; width: 8px; height: 8px; border-radius: 2px; background: var(--muted); }
+    .sev.s0::before, .sev.s1::before, .sev.s2::before { background: var(--critical); box-shadow: 0 0 8px var(--critical); }
+    .sev.s3::before { background: var(--serious); }
+    .sev.s4::before { background: var(--warning); }
+    .sev.s5::before, .sev.s6::before, .sev.s7::before { background: var(--series-1); }
+    .tag-change { display: inline-flex; align-items: center; gap: 4px; margin-left: 8px; font-family: var(--font-sans); font-size: 0.7rem; font-weight: 600;
+        color: var(--text); background: rgba(250, 178, 25, 0.12); border: 1px solid rgba(250, 178, 25, 0.35); border-radius: 999px; padding: 1px 8px; vertical-align: 1px; }
+    .tag-change i { color: var(--warning); }
+
+    .log-footer { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; padding: 12px 16px; border-top: 1px solid var(--border); font-size: 0.8rem; color: var(--muted); }
+</style>
+
+<div class="page-header">
+    <div>
+        <div class="page-eyebrow">Monitor</div>
+        <h1 class="page-title">Syslog</h1>
+        <p class="page-subtitle">Messages received from your network on UDP/TCP port 514</p>
+    </div>
+    <div class="d-flex align-items-center gap-3">
+        <span class="status is-muted" id="live-status"><span class="live-dot" id="live-dot"></span> <span id="live-text">Live</span></span>
+        <span class="small text-muted-nms">Updated <span id="updated-at">—</span></span>
+    </div>
+</div>
+
+<div class="panel mb-3">
+    <form class="toolbar" id="filters" autocomplete="off" onsubmit="return false">
+        <div class="search-field" id="search-field">
+            <i class="bi bi-search"></i>
+            <input type="search" class="input-nms" id="q" placeholder="Search by pattern, e.g. %LINK-3-UPDOWN or Gi1/0/12" aria-label="Search pattern">
+            <kbd>/</kbd>
+        </div>
+        <button type="button" class="btn-ghost toggle-regex" id="regex" aria-pressed="false" title="Treat the search as a regular expression">.*</button>
+
+        <span class="select-label">Severity</span>
+        <select class="input-nms select-compact" id="severity" aria-label="Minimum severity">
+            <option value="">All</option>
+            {% for level, label in severities %}
+            <option value="{{ level }}">{{ label }}{% if level > 0 and level < 7 %} &amp; worse{% endif %}</option>
+            {% endfor %}
+        </select>
+
+        <span class="select-label">Refresh</span>
+        <select class="input-nms select-compact" id="interval" aria-label="Refresh interval">
+            <option value="0">Off</option>
+            <option value="5" selected>5s</option>
+            <option value="10">10s</option>
+            <option value="30">30s</option>
+            <option value="60">1 min</option>
+        </select>
+
+        <button type="button" class="btn-ghost" id="pause" title="Pause auto-refresh"><i class="bi bi-pause-fill"></i><span class="d-none d-md-inline">Pause</span></button>
+        <button type="button" class="btn-ghost" id="refresh-now" title="Refresh now" aria-label="Refresh now"><i class="bi bi-arrow-clockwise"></i></button>
+    </form>
+    <div class="search-error" id="search-error" hidden></div>
+    <div class="refresh-progress"><span id="progress"></span></div>
+</div>
+
+<div class="panel">
+    <div class="log-scroll">
+        <table class="data-table log-table">
+            <thead>
+                <tr><th style="width: 150px">Time</th><th style="width: 110px">Severity</th><th style="width: 170px">Source</th><th>Message</th></tr>
+            </thead>
+            <tbody id="log-body">
+                <tr><td colspan="4"><div class="empty-state"><div class="spinner-border spinner-border-sm text-info"></div></div></td></tr>
+            </tbody>
+        </table>
+    </div>
+    <div class="log-footer">
+        <span id="result-count">Loading…</span>
+        <span class="d-flex align-items-center gap-2">
+            Show
+            <select class="input-nms select-compact py-1" id="limit" aria-label="Number of messages to show">
+                <option value="200" selected>200</option>
+                <option value="500">500</option>
+                <option value="1000">1000</option>
+            </select>
+            most recent
+        </span>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(() => {
+    const API = "{% url 'syslog_messages' %}";
+    const $ = id => document.getElementById(id);
+    const els = {
+        q: $('q'), regex: $('regex'), severity: $('severity'), interval: $('interval'), limit: $('limit'),
+        pause: $('pause'), refreshNow: $('refresh-now'), body: $('log-body'), count: $('result-count'),
+        updated: $('updated-at'), progress: $('progress'), dot: $('live-dot'), liveText: $('live-text'),
+        searchField: $('search-field'), searchError: $('search-error'),
+    };
+
+    let timer = null;
+    let controller = null;
+    let paused = false;
+    let lastMaxId = null;
+    let filterKey = '';
+
+    // --- Persisted preferences (per browser) and shareable URL state ---
+    const store = {
+        get(k) { try { return localStorage.getItem(k); } catch { return null; } },
+        set(k, v) { try { localStorage.setItem(k, v); } catch {} },
+    };
+
+    const params = new URLSearchParams(location.search);
+    els.q.value = params.get('q') || '';
+    els.regex.setAttribute('aria-pressed', params.get('regex') === '1' ? 'true' : 'false');
+    els.severity.value = params.get('severity') || '';
+    const savedInterval = store.get('syslog.interval');
+    if (savedInterval !== null && [...els.interval.options].some(o => o.value === savedInterval)) els.interval.value = savedInterval;
+    const savedLimit = store.get('syslog.limit');
+    if (savedLimit !== null && [...els.limit.options].some(o => o.value === savedLimit)) els.limit.value = savedLimit;
+
+    const isRegex = () => els.regex.getAttribute('aria-pressed') === 'true';
+
+    function queryParams() {
+        const p = new URLSearchParams();
+        if (els.q.value.trim()) p.set('q', els.q.value.trim());
+        if (isRegex()) p.set('regex', '1');
+        if (els.severity.value) p.set('severity', els.severity.value);
+        return p;
+    }
+
+    function syncUrl() {
+        const p = queryParams().toString();
+        history.replaceState(null, '', p ? `?${p}` : location.pathname);
+    }
+
+    // --- Highlighting (text nodes only, never innerHTML) ---
+    function highlighter() {
+        const pattern = els.q.value.trim();
+        if (!pattern) return null;
+        try {
+            const source = isRegex() ? pattern : pattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            return new RegExp(source, 'gi');
+        } catch {
+            return null;  // Python-only regex syntax: search still works server-side, just no highlight
+        }
+    }
+
+    function appendHighlighted(parent, text, re) {
+        if (!re || !text) { parent.append(text || ''); return; }
+        let last = 0;
+        re.lastIndex = 0;
+        for (const match of text.matchAll(re)) {
+            if (!match[0]) continue;
+            parent.append(text.slice(last, match.index));
+            const mark = document.createElement('mark');
+            mark.textContent = match[0];
+            parent.append(mark);
+            last = match.index + match[0].length;
+        }
+        parent.append(text.slice(last));
+    }
+
+    function cell(className) {
+        const td = document.createElement('td');
+        if (className) td.className = className;
+        return td;
+    }
+
+    function renderRows(messages, flashNew) {
+        const re = highlighter();
+        const rows = messages.map(m => {
+            const tr = document.createElement('tr');
+            if (flashNew && lastMaxId !== null && m.id > lastMaxId) tr.className = 'is-new';
+
+            const time = cell('log-time');
+            const date = new Date(m.received_at);
+            time.textContent = NMS.formatDateTime(date);
+            time.title = date.toLocaleString();
+
+            const sevCell = cell();
+            const sev = document.createElement('span');
+            sev.className = `sev s${m.severity ?? 'x'}`;
+            sev.textContent = m.severity_label || 'Unknown';
+            sevCell.append(sev);
+
+            const source = cell('log-source');
+            const host = document.createElement('div');
+            host.className = 'host';
+            appendHighlighted(host, m.device || m.hostname || m.source_ip, re);
+            source.append(host);
+            if (m.device || m.hostname) {
+                const ip = document.createElement('div');
+                ip.className = 'ip';
+                appendHighlighted(ip, m.source_ip, re);
+                source.append(ip);
+            }
+
+            const msg = cell('log-message');
+            appendHighlighted(msg, m.message, re);
+            if (m.config_change) {
+                const tag = document.createElement('span');
+                tag.className = 'tag-change';
+                tag.innerHTML = '<i class="bi bi-arrow-left-right"></i>';
+                tag.append(' Config change');
+                msg.append(tag);
+            }
+
+            tr.append(time, sevCell, source, msg);
+            return tr;
+        });
+
+        if (!rows.length) {
+            const tr = document.createElement('tr');
+            const td = cell();
+            td.colSpan = 4;
+            const filtered = queryParams().toString() !== '';
+            td.innerHTML = filtered
+                ? '<div class="empty-state"><i class="bi bi-search"></i><div class="title">No matching messages</div>Try a different pattern or severity.</div>'
+                : '<div class="empty-state"><i class="bi bi-broadcast"></i><div class="title">Waiting for syslog…</div>Point your switches at this server on UDP/TCP 514.<br>To test: <code>python manage.py syslog_test</code></div>';
+            tr.append(td);
+            rows.push(tr);
+        }
+        els.body.replaceChildren(...rows);
+    }
+
+    // --- Fetching & scheduling ---
+    function showSearchError(message) {
+        els.searchField.classList.toggle('has-error', !!message);
+        els.searchError.hidden = !message;
+        els.searchError.textContent = message || '';
+    }
+
+    async function load() {
+        clearTimeout(timer);
+        if (controller) controller.abort();
+        controller = new AbortController();
+
+        const p = queryParams();
+        p.set('limit', els.limit.value);
+        const key = p.toString();
+        const sameFilter = key === filterKey;
+
+        try {
+            const response = await fetch(`${API}?${key}`, { signal: controller.signal, headers: { Accept: 'application/json' } });
+            if (response.redirected || !(response.headers.get('content-type') || '').includes('application/json')) {
+                showSearchError('Your session has expired. Reload the page to sign in again.');
+                return;
+            }
+            const data = await response.json();
+            if (!response.ok) {
+                showSearchError(data.error || 'Search failed.');
+                return;
+            }
+            showSearchError(null);
+            renderRows(data.messages, sameFilter);
+            lastMaxId = data.messages.length ? Math.max(...data.messages.map(m => m.id)) : lastMaxId;
+            filterKey = key;
+            els.count.textContent = data.messages.length >= data.limit
+                ? `Showing the ${data.limit} most recent matching messages`
+                : `${data.messages.length.toLocaleString()} matching message${data.messages.length === 1 ? '' : 's'}`;
+            els.updated.textContent = new Date().toLocaleTimeString();
+        } catch (e) {
+            if (e.name === 'AbortError') return;
+            showSearchError(`Couldn't reach the server: ${e.message}`);
+        } finally {
+            schedule();
+        }
+    }
+
+    function schedule() {
+        clearTimeout(timer);
+        const seconds = Number(els.interval.value);
+        const running = seconds > 0 && !paused && !document.hidden;
+
+        els.dot.classList.toggle('is-paused', !running);
+        els.liveText.textContent = running ? `Live · every ${seconds < 60 ? seconds + 's' : '1 min'}` : (paused ? 'Paused' : 'Auto-refresh off');
+        els.pause.innerHTML = paused ? '<i class="bi bi-play-fill"></i><span class="d-none d-md-inline">Resume</span>' : '<i class="bi bi-pause-fill"></i><span class="d-none d-md-inline">Pause</span>';
+
+        // Restart the countdown bar
+        els.progress.classList.remove('is-running');
+        void els.progress.offsetWidth;
+        if (running) {
+            els.progress.style.animationDuration = `${seconds}s`;
+            els.progress.classList.add('is-running');
+            timer = setTimeout(load, seconds * 1000);
+        }
+    }
+
+    // --- Events ---
+    let debounce;
+    els.q.addEventListener('input', () => {
+        clearTimeout(debounce);
+        debounce = setTimeout(() => { syncUrl(); load(); }, 300);
+    });
+    els.regex.addEventListener('click', () => {
+        els.regex.setAttribute('aria-pressed', isRegex() ? 'false' : 'true');
+        syncUrl(); load();
+    });
+    els.severity.addEventListener('change', () => { syncUrl(); load(); });
+    els.interval.addEventListener('change', () => { store.set('syslog.interval', els.interval.value); paused = false; load(); });
+    els.limit.addEventListener('change', () => { store.set('syslog.limit', els.limit.value); load(); });
+    els.pause.addEventListener('click', () => { paused = !paused; paused ? schedule() : load(); });
+    els.refreshNow.addEventListener('click', load);
+    document.addEventListener('visibilitychange', () => document.hidden ? schedule() : load());
+    document.addEventListener('keydown', e => {
+        if (e.key === '/' && document.activeElement !== els.q && !['INPUT', 'SELECT', 'TEXTAREA'].includes(document.activeElement.tagName)) {
+            e.preventDefault();
+            els.q.focus();
+        }
+    });
+
+    load();
+})();
+</script>
+{% endblock %}

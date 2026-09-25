@@ -1,0 +1,139 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en" data-bs-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ device.hostname }} · SSH</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/css/xterm.css">
+    <link rel="stylesheet" href="{% static 'css/style.css' %}?v={{ STATIC_VERSION }}">
+    <style>
+        html, body { height: 100%; overflow: hidden; background: #050a14; background-image: none; }
+        .console-shell { display: flex; flex-direction: column; height: 100vh; }
+        .console-bar {
+            display: flex; align-items: center; gap: 12px; padding: 10px 14px;
+            background: var(--bg-sidebar); border-bottom: 1px solid var(--border); flex-shrink: 0;
+        }
+        .console-bar .brand-mark { width: 30px; height: 30px; font-size: 0.95rem; border-radius: 8px; }
+        .console-host { font-weight: 600; }
+        .console-bar .btn-ghost { padding: 6px 12px; font-size: 0.82rem; }
+        .console-body { flex: 1; min-height: 0; padding: 10px 4px 4px 12px; }
+        #terminal { height: 100%; }
+        .xterm .xterm-viewport { scrollbar-width: thin; }
+    </style>
+</head>
+<body>
+<div class="console-shell">
+    <div class="console-bar">
+        <span class="brand-mark"><i class="bi bi-terminal"></i></span>
+        <span class="console-host">{{ device.hostname }}</span>
+        <span class="ip-chip">{{ device.username }}@{{ device.ip_address }}</span>
+        <span class="status is-muted ms-2" id="status"><span class="live-dot is-paused" id="status-dot"></span> <span id="status-text">Connecting…</span></span>
+        <div class="ms-auto d-flex gap-2">
+            <button type="button" class="btn-ghost" id="reconnect" hidden><i class="bi bi-arrow-repeat"></i> Reconnect</button>
+            <button type="button" class="btn-ghost" id="close-window" title="Close window"><i class="bi bi-x-lg"></i> Close</button>
+        </div>
+    </div>
+    <div class="console-body"><div id="terminal"></div></div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/lib/xterm.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@xterm/addon-fit@0.10.0/lib/addon-fit.js"></script>
+<script>
+(() => {
+    const WS_URL = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws/ssh/{{ device.id }}/`;
+    const statusEl = document.getElementById('status');
+    const statusDot = document.getElementById('status-dot');
+    const statusText = document.getElementById('status-text');
+    const reconnectBtn = document.getElementById('reconnect');
+
+    const term = new Terminal({
+        cursorBlink: true,
+        fontFamily: '"JetBrains Mono", "Cascadia Mono", Consolas, monospace',
+        fontSize: 14,
+        scrollback: 5000,
+        theme: {
+            background: '#050a14', foreground: '#e6edf7', cursor: '#22d3ee', cursorAccent: '#050a14',
+            selectionBackground: 'rgba(34, 211, 238, 0.3)',
+        },
+    });
+    const fit = new FitAddon.FitAddon();
+    term.loadAddon(fit);
+    term.open(document.getElementById('terminal'));
+    fit.fit();
+
+    let ws = null;
+    let connected = false;
+
+    // Dim gray for local status lines, red for errors (ANSI escape codes)
+    const info = text => term.writeln(`\x1b[90m${text}\x1b[0m`);
+    const error = text => term.writeln(`\x1b[31m${text}\x1b[0m`);
+
+    function setStatus(state, text) {
+        statusEl.className = `status ms-2 ${state === 'connected' ? 'is-good' : state === 'error' ? 'is-critical' : 'is-muted'}`;
+        statusDot.classList.toggle('is-paused', state !== 'connected');
+        statusText.textContent = text;
+        reconnectBtn.hidden = state === 'connected' || state === 'connecting';
+    }
+
+    function send(message) {
+        if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(message));
+    }
+
+    function connect() {
+        setStatus('connecting', 'Connecting…');
+        ws = new WebSocket(`${WS_URL}?cols=${term.cols}&rows=${term.rows}`);
+        ws.binaryType = 'arraybuffer';
+
+        ws.onmessage = event => {
+            if (event.data instanceof ArrayBuffer) {
+                term.write(new Uint8Array(event.data));
+                return;
+            }
+            const msg = JSON.parse(event.data);
+            if (msg.type === 'status' && msg.message === 'connected') {
+                connected = true;
+                setStatus('connected', 'Connected');
+                term.focus();
+            } else if (msg.type === 'status') {
+                info(msg.message);
+            } else if (msg.type === 'error') {
+                error(msg.message);
+                setStatus('error', 'Failed');
+            } else if (msg.type === 'closed') {
+                info(`\r\n${msg.message}`);
+            }
+        };
+
+        ws.onclose = event => {
+            if (event.code === 4401) error('Your session has expired. Sign in again, then reconnect.');
+            if (event.code === 4403) error('Connection refused: open the console from the NMS inventory page.');
+            if (connected || statusText.textContent === 'Connecting…') setStatus('closed', 'Disconnected');
+            if (connected) info('Press Enter or click Reconnect to open a new session.');
+            connected = false;
+            ws = null;
+        };
+    }
+
+    term.onData(data => {
+        if (ws) send({ type: 'input', data });
+        else if (data === '\r') { term.writeln(''); connect(); }
+    });
+    term.onResize(({ cols, rows }) => send({ type: 'resize', cols, rows }));
+    window.addEventListener('resize', () => fit.fit());
+    document.fonts.ready.then(() => fit.fit());
+
+    reconnectBtn.addEventListener('click', () => { term.writeln(''); connect(); });
+    document.getElementById('close-window').addEventListener('click', () => {
+        if (ws) ws.close();
+        window.close();
+    });
+
+    connect();
+})();
+</script>
+</body>
+</html>

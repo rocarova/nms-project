@@ -1,0 +1,291 @@
+{% extends 'system_management/base.html' %}
+
+{% block title %}Settings{% endblock %}
+
+{% block content %}
+<style>
+    .settings-nav { position: sticky; top: 24px; padding: 8px; }
+    .settings-nav button {
+        display: flex; align-items: center; gap: 12px; width: 100%; text-align: left;
+        padding: 12px 14px; border: none; border-radius: 10px; background: transparent;
+        color: var(--text-2); font-weight: 500; font-size: 0.92rem; transition: all 0.15s;
+    }
+    .settings-nav button i { font-size: 1.05rem; width: 20px; text-align: center; }
+    .settings-nav button small { display: block; font-size: 0.75rem; color: var(--muted); font-weight: 400; }
+    .settings-nav button:hover { background: var(--surface-2); color: var(--text); }
+    .settings-nav button[aria-selected="true"] { background: var(--accent-soft); color: var(--text); }
+    .settings-nav button[aria-selected="true"] i { color: var(--accent); }
+
+    .settings-pane[hidden] { display: none; }
+    .notice {
+        display: flex; gap: 12px; align-items: flex-start; padding: 12px 14px; margin-bottom: 20px;
+        border-radius: 10px; font-size: 0.86rem; color: var(--text-2);
+        background: rgba(57, 135, 229, 0.08); border: 1px solid rgba(57, 135, 229, 0.3);
+    }
+    .notice i { color: var(--series-1); font-size: 1rem; margin-top: 1px; }
+    .notice strong { color: var(--text); }
+
+    .listener-card { display: flex; align-items: center; gap: 14px; padding: 14px 16px; border-radius: 12px; background: var(--bg); border: 1px solid var(--border); margin-bottom: 20px; }
+    .listener-card .title { font-weight: 600; font-size: 0.92rem; }
+    .listener-card .desc { color: var(--muted); font-size: 0.8rem; }
+    .account-card { display: flex; align-items: center; gap: 14px; margin-bottom: 22px; }
+    .account-card .avatar { width: 48px; height: 48px; font-size: 1.2rem; }
+</style>
+
+<div class="page-header">
+    <div>
+        <div class="page-eyebrow">System</div>
+        <h1 class="page-title">Settings</h1>
+        <p class="page-subtitle">Your account, syslog listener, backup schedule and notifications</p>
+    </div>
+</div>
+
+{% include 'system_management/_messages.html' %}
+
+<div class="row g-3 align-items-start">
+    <div class="col-lg-3">
+        <nav class="panel settings-nav" role="tablist" aria-label="Settings sections">
+            <button type="button" role="tab" data-tab="account" aria-selected="{% if tab == 'account' %}true{% else %}false{% endif %}">
+                <i class="bi bi-person-lock"></i><span>Account<small>Change your password</small></span>
+            </button>
+            <button type="button" role="tab" data-tab="syslog" aria-selected="{% if tab == 'syslog' %}true{% else %}false{% endif %}">
+                <i class="bi bi-journal-code"></i><span>Syslog<small>Listening port &amp; retention</small></span>
+            </button>
+            <button type="button" role="tab" data-tab="backups" aria-selected="{% if tab == 'backups' %}true{% else %}false{% endif %}">
+                <i class="bi bi-clock-history"></i><span>Backups<small>Schedule &amp; retention</small></span>
+            </button>
+            <button type="button" role="tab" data-tab="email" aria-selected="{% if tab == 'email' %}true{% else %}false{% endif %}">
+                <i class="bi bi-envelope"></i><span>Email<small>Notifications</small></span>
+            </button>
+        </nav>
+    </div>
+
+    <div class="col-lg-9">
+        <!-- Account -->
+        <section class="settings-pane" id="pane-account" role="tabpanel" {% if tab != 'account' %}hidden{% endif %}>
+            <form method="POST" class="panel custom-device-form" novalidate>
+                {% csrf_token %}
+                <input type="hidden" name="section" value="account">
+                <div class="form-section">
+                    <div class="account-card">
+                        <span class="avatar">{{ user.username|first }}</span>
+                        <div>
+                            <div class="fw-semibold">{{ user.username }}</div>
+                            <div class="small text-muted-nms">{% if user.is_superuser %}Administrator{% else %}Operator{% endif %} · member since {{ user.date_joined|date:"M j, Y" }}</div>
+                        </div>
+                    </div>
+                    <div class="section-head">
+                        <span class="section-icon"><i class="bi bi-key"></i></span>
+                        <div>
+                            <h2 class="section-title">Change password</h2>
+                            <p class="section-subtitle">You'll stay signed in on this device</p>
+                        </div>
+                    </div>
+                    {% with form=forms.account %}
+                    {% for error in form.non_field_errors %}<div class="alert-nms"><i class="bi bi-exclamation-triangle-fill"></i> <span>{{ error }}</span></div>{% endfor %}
+                    {% include 'system_management/_settings_field.html' with field=form.old_password icon='lock' %}
+                    <div class="form-grid">
+                        {% include 'system_management/_settings_field.html' with field=form.new_password1 icon='shield-lock' hint=' ' %}
+                        {% include 'system_management/_settings_field.html' with field=form.new_password2 icon='shield-check' %}
+                    </div>
+                    <div class="helptext mb-3">{{ form.new_password1.help_text|safe }}</div>
+                    {% endwith %}
+                </div>
+                <div class="form-footer">
+                    <button type="submit" class="btn-accent"><i class="bi bi-check2"></i> Update password</button>
+                </div>
+            </form>
+        </section>
+
+        <!-- Syslog -->
+        <section class="settings-pane" id="pane-syslog" role="tabpanel" {% if tab != 'syslog' %}hidden{% endif %}>
+            <form method="POST" class="panel custom-device-form" novalidate>
+                {% csrf_token %}
+                <input type="hidden" name="section" value="syslog">
+                <div class="form-section">
+                    <div class="section-head">
+                        <span class="section-icon"><i class="bi bi-broadcast"></i></span>
+                        <div>
+                            <h2 class="section-title">Syslog listener</h2>
+                            <p class="section-subtitle">Where switches send their logs</p>
+                        </div>
+                    </div>
+
+                    <div class="listener-card">
+                        {% if listener_running %}
+                        <span class="live-dot"></span>
+                        <div>
+                            <div class="title">Listening on UDP/TCP {{ system.listener_port }}</div>
+                            <div class="desc">Last check-in <time data-time="{{ system.listener_seen_at|date:'c' }}" data-format="relative"></time></div>
+                        </div>
+                        {% else %}
+                        <span class="live-dot is-paused"></span>
+                        <div>
+                            <div class="title">Listener not running</div>
+                            <div class="desc">Start it with <code>python manage.py syslog_server</code></div>
+                        </div>
+                        {% endif %}
+                    </div>
+                    {% if listener_running and system.listener_error %}
+                    <div class="alert-nms"><i class="bi bi-exclamation-triangle-fill"></i> <span>{{ system.listener_error }}</span></div>
+                    {% endif %}
+
+                    {% with form=forms.syslog %}
+                    <div class="form-grid">
+                        {% include 'system_management/_settings_field.html' with field=form.syslog_port icon='ethernet' hint='Standard is 514. The listener switches to a new port within a few seconds.' %}
+                        {% include 'system_management/_settings_field.html' with field=form.syslog_retention_days icon='calendar-range' %}
+                    </div>
+                    {% endwith %}
+
+                    <div class="notice">
+                        <i class="bi bi-info-circle-fill"></i>
+                        <div>
+                            <strong>If you change the port</strong>, update your switches and allow it through the firewall. On Cisco:
+                            <pre class="snippet">logging host {{ server_ip }} transport udp port {{ system.syslog_port }}</pre>
+                        </div>
+                    </div>
+                </div>
+                <div class="form-footer">
+                    <button type="submit" class="btn-accent"><i class="bi bi-check2"></i> Save syslog settings</button>
+                </div>
+            </form>
+        </section>
+
+        <!-- Backups -->
+        <section class="settings-pane" id="pane-backups" role="tabpanel" {% if tab != 'backups' %}hidden{% endif %}>
+            <form method="POST" class="panel custom-device-form" novalidate>
+                {% csrf_token %}
+                <input type="hidden" name="section" value="backups">
+                <div class="form-section">
+                    <div class="section-head">
+                        <span class="section-icon"><i class="bi bi-clock-history"></i></span>
+                        <div>
+                            <h2 class="section-title">Backup schedule</h2>
+                            <p class="section-subtitle">How often switch configurations are saved to the repository</p>
+                        </div>
+                    </div>
+                    <div class="notice">
+                        <i class="bi bi-info-circle-fill"></i>
+                        <div><strong>Automatic backups aren't running yet.</strong> The schedule is saved now and will be used once the backup job is enabled.</div>
+                    </div>
+                    {% with form=forms.backups %}
+                    <div class="form-grid">
+                        {% include 'system_management/_settings_field.html' with field=form.backup_frequency icon='arrow-repeat' %}
+                        {% include 'system_management/_settings_field.html' with field=form.backup_retention icon='archive' %}
+                        <div data-show-for="daily weekly">
+                            {% include 'system_management/_settings_field.html' with field=form.backup_time icon='clock' %}
+                        </div>
+                        <div data-show-for="weekly">
+                            {% include 'system_management/_settings_field.html' with field=form.backup_weekday icon='calendar-week' %}
+                        </div>
+                    </div>
+                    {% endwith %}
+                    <p class="small text-muted-nms mb-3" id="schedule-summary"></p>
+                </div>
+                <div class="form-footer">
+                    <button type="submit" class="btn-accent"><i class="bi bi-check2"></i> Save backup schedule</button>
+                </div>
+            </form>
+        </section>
+
+        <!-- Email -->
+        <section class="settings-pane" id="pane-email" role="tabpanel" {% if tab != 'email' %}hidden{% endif %}>
+            <form method="POST" class="panel custom-device-form" novalidate>
+                {% csrf_token %}
+                <input type="hidden" name="section" value="email">
+                {% with form=forms.email %}
+                <div class="form-section">
+                    <div class="section-head">
+                        <span class="section-icon"><i class="bi bi-envelope"></i></span>
+                        <div>
+                            <h2 class="section-title">Email notifications</h2>
+                            <p class="section-subtitle">Get alerted when something needs attention</p>
+                        </div>
+                    </div>
+                    <div class="notice">
+                        <i class="bi bi-info-circle-fill"></i>
+                        <div><strong>Email sending isn't active yet.</strong> You can save your mail server details now; notifications will start once sending is built.</div>
+                    </div>
+                    {% include 'system_management/_settings_field.html' with field=form.email_enabled hint='Send notifications from NetOps Center by email' %}
+                </div>
+
+                <div class="form-section">
+                    <div class="section-head">
+                        <span class="section-icon"><i class="bi bi-hdd-stack"></i></span>
+                        <div>
+                            <h2 class="section-title">Mail server</h2>
+                            <p class="section-subtitle">SMTP server used to send notifications</p>
+                        </div>
+                    </div>
+                    <div class="form-grid">
+                        {% include 'system_management/_settings_field.html' with field=form.smtp_host icon='hdd-network' %}
+                        <div class="form-grid" style="gap: 0 12px;">
+                            {% include 'system_management/_settings_field.html' with field=form.smtp_port icon='ethernet' %}
+                            {% include 'system_management/_settings_field.html' with field=form.smtp_security icon='shield-lock' %}
+                        </div>
+                        {% include 'system_management/_settings_field.html' with field=form.smtp_username icon='person' %}
+                        {% if has_smtp_password %}
+                        {% include 'system_management/_settings_field.html' with field=form.smtp_password icon='lock' hint='A password is saved. Leave blank to keep it.' %}
+                        {% else %}
+                        {% include 'system_management/_settings_field.html' with field=form.smtp_password icon='lock' hint=' ' %}
+                        {% endif %}
+                    </div>
+                </div>
+
+                <div class="form-section">
+                    <div class="section-head">
+                        <span class="section-icon"><i class="bi bi-send"></i></span>
+                        <div>
+                            <h2 class="section-title">Sender &amp; recipients</h2>
+                            <p class="section-subtitle">Who notifications come from and who receives them</p>
+                        </div>
+                    </div>
+                    <div class="form-grid">
+                        {% include 'system_management/_settings_field.html' with field=form.email_from icon='at' %}
+                        <div class="grid-span-2">{% include 'system_management/_settings_field.html' with field=form.email_recipients %}</div>
+                    </div>
+                    <div class="small text-muted-nms text-uppercase fw-semibold mb-2" style="letter-spacing: 0.08em; font-size: 0.75rem;">Notify me when</div>
+                    {% include 'system_management/_settings_field.html' with field=form.notify_backup_failed hint='Includes the error returned by the switch' %}
+                    {% include 'system_management/_settings_field.html' with field=form.notify_config_changed hint='Detected from syslog or a backup comparison' %}
+                </div>
+                {% endwith %}
+                <div class="form-footer">
+                    <button type="button" class="btn-ghost" disabled title="Available once email sending is built"><i class="bi bi-send"></i> Send test email</button>
+                    <button type="submit" class="btn-accent"><i class="bi bi-check2"></i> Save email settings</button>
+                </div>
+            </form>
+        </section>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(() => {
+    // Tabs: switch panes client-side and keep ?tab= in the URL
+    const tabs = document.querySelectorAll('.settings-nav [data-tab]');
+    tabs.forEach(tab => tab.addEventListener('click', () => {
+        tabs.forEach(t => t.setAttribute('aria-selected', t === tab ? 'true' : 'false'));
+        document.querySelectorAll('.settings-pane').forEach(p => p.hidden = p.id !== `pane-${tab.dataset.tab}`);
+        history.replaceState(null, '', `?tab=${tab.dataset.tab}`);
+    }));
+
+    // Backups: only show time / weekday when they apply, and summarize the schedule
+    const frequency = document.getElementById('id_backup_frequency');
+    const time = document.getElementById('id_backup_time');
+    const weekday = document.getElementById('id_backup_weekday');
+    const summary = document.getElementById('schedule-summary');
+    function updateSchedule() {
+        const value = frequency.value;
+        document.querySelectorAll('[data-show-for]').forEach(el => el.hidden = !el.dataset.showFor.split(' ').includes(value));
+        const label = frequency.options[frequency.selectedIndex].text.toLowerCase();
+        summary.textContent = value === 'disabled' ? 'Switches will not be backed up automatically.'
+            : value === 'daily' ? `Switches will be backed up every day at ${time.value || '—'}.`
+            : value === 'weekly' ? `Switches will be backed up every ${weekday.options[weekday.selectedIndex].text} at ${time.value || '—'}.`
+            : `Switches will be backed up ${label}.`;
+    }
+    [frequency, time, weekday].forEach(el => el.addEventListener('input', updateSchedule));
+    updateSchedule();
+})();
+</script>
+{% endblock %}

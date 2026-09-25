@@ -1,0 +1,18 @@
+{% extends 'net_tools/terminal_tool.html' %}
+
+{% block title %}nslookup{% endblock %}
+{% block tool_name %}nslookup{% endblock %}
+{% block tool_description %}Query DNS records for a domain, or reverse-lookup an IP address{% endblock %}
+{% block tool_url %}{% url 'nslookup' %}{% endblock %}
+{% block running_text %}Looking up{% endblock %}
+{% block done_text %}Lookup complete{% endblock %}
+{% block target_placeholder %}Domain or IP, e.g. example.com or 8.8.8.8{% endblock %}
+
+{% block extra_fields %}
+<select class="input-nms mono" name="type" aria-label="Record type" title="Record type" style="width: auto;">
+    {% for record_type in record_types %}
+    <option value="{{ record_type }}">{{ record_type }}</option>
+    {% endfor %}
+</select>
+<input type="text" class="input-nms mono" name="server" placeholder="DNS server (optional)" aria-label="DNS server" style="width: 210px;">
+{% endblock %}

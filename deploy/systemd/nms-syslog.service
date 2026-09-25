@@ -1,0 +1,32 @@
+# NetOps Center syslog listener (UDP + TCP; port comes from Settings in the web UI, default 514).
+# Install: sudo cp deploy/systemd/nms-syslog.service /etc/systemd/system/ && sudo systemctl enable --now nms-syslog
+
+[Unit]
+Description=NetOps Center syslog listener
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=nms
+Group=nms
+WorkingDirectory=/opt/nms
+EnvironmentFile=/opt/nms/.env
+ExecStart=/opt/nms/.venv/bin/python manage.py syslog_server
+Restart=on-failure
+RestartSec=5
+# Unbuffered output so messages show up in journalctl right away
+Environment=PYTHONUNBUFFERED=1
+
+# Ports below 1024 (like 514) need this capability; the service still runs as the unprivileged nms user
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE
+
+# Hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+
+[Install]
+WantedBy=multi-user.target

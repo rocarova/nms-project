@@ -1,0 +1,88 @@
+{% extends 'system_management/base.html' %}
+
+{% block title %}{{ device.hostname }} compare{% endblock %}
+
+{% block content %}
+{% url 'device_backups' device.id as history_url %}
+{% include 'backups/_device_header.html' with title='Compare backups' crumb='Compare' back_url=history_url back_label='All backups' %}
+
+<form class="panel p-3 mb-3 d-flex flex-wrap gap-3 align-items-end" method="GET" id="pick-form">
+    <div style="flex: 1 1 240px;">
+        <label class="d-block small text-muted-nms fw-semibold text-uppercase mb-1" style="letter-spacing: 0.08em; font-size: 0.72rem;" for="pick-a">
+            <span class="diff-stat del">−</span> Older
+        </label>
+        <select class="input-nms" name="a" id="pick-a">
+            {% for b in history %}<option value="{{ b.id }}"{% if b.id == old.id %} selected{% endif %} data-time="{{ b.created|date:'c' }}">{{ b.created|date:"Y-m-d H:i" }} UTC</option>{% endfor %}
+        </select>
+    </div>
+    <div class="pb-2 text-muted-nms"><i class="bi bi-arrow-right"></i></div>
+    <div style="flex: 1 1 240px;">
+        <label class="d-block small text-muted-nms fw-semibold text-uppercase mb-1" style="letter-spacing: 0.08em; font-size: 0.72rem;" for="pick-b">
+            <span class="diff-stat add">+</span> Newer
+        </label>
+        <select class="input-nms" name="b" id="pick-b">
+            {% for b in history %}<option value="{{ b.id }}"{% if b.id == new.id %} selected{% endif %} data-time="{{ b.created|date:'c' }}">{{ b.created|date:"Y-m-d H:i" }} UTC</option>{% endfor %}
+        </select>
+    </div>
+    {% if full %}<input type="hidden" name="view" value="full">{% endif %}
+    <button type="submit" class="btn-accent"><i class="bi bi-arrow-repeat"></i> Compare</button>
+</form>
+
+<div class="panel">
+    <div class="panel-header flex-wrap">
+        <div>
+            <h2 class="panel-title">
+                <time data-time="{{ old.created|date:'c' }}"></time>
+                <i class="bi bi-arrow-right mx-1 text-muted-nms"></i>
+                <time data-time="{{ new.created|date:'c' }}"></time>
+            </h2>
+            <p class="panel-subtitle d-flex gap-3 mt-1">
+                <span class="diff-stat add"><i class="bi bi-plus-square"></i> {{ added }} added</span>
+                <span class="diff-stat del"><i class="bi bi-dash-square"></i> {{ removed }} removed</span>
+            </p>
+        </div>
+        <div class="d-flex gap-2 align-items-center">
+            <div class="seg" role="group" aria-label="Diff view">
+                <a href="{{ changes_url }}" class="{% if not full %}active{% endif %}">Changes only</a>
+                <a href="{{ changes_url }}&view=full" class="{% if full %}active{% endif %}">Full config</a>
+            </div>
+            <a href="{% url 'backup_detail' device.id old.id %}" class="btn-ghost" title="View the older backup"><i class="bi bi-eye"></i> Older</a>
+            <a href="{% url 'backup_detail' device.id new.id %}" class="btn-ghost" title="View the newer backup"><i class="bi bi-eye"></i> Newer</a>
+        </div>
+    </div>
+
+    {% if rows %}
+    <div class="code-scroll">
+        <table class="code-view">
+            <tbody>
+                {% for row in rows %}
+                {% if row.kind == 'hunk' %}
+                <tr class="d-hunk"><td class="ln"></td><td class="ln"></td><td class="mk"></td><td>{{ row.text }}</td></tr>
+                {% else %}
+                <tr class="d-{{ row.kind }}">
+                    <td class="ln">{{ row.old|default_if_none:"" }}</td>
+                    <td class="ln">{{ row.new|default_if_none:"" }}</td>
+                    <td class="mk">{% if row.kind == 'add' %}+{% elif row.kind == 'del' %}−{% endif %}</td>
+                    <td>{{ row.text }}</td>
+                </tr>
+                {% endif %}
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="empty-state">
+        <i class="bi bi-check2-all"></i>
+        <div class="title">No differences</div>
+        These two backups have identical configurations.
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Show the backup picker times in local time, like the rest of the page
+    document.querySelectorAll('#pick-form option[data-time]').forEach(o => o.textContent = NMS.formatDateTime(new Date(o.dataset.time)));
+</script>
+{% endblock %}

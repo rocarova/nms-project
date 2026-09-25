@@ -1,0 +1,93 @@
+{% extends 'system_management/base.html' %}
+
+{% block title %}{{ device.hostname }} config{% endblock %}
+
+{% block content %}
+{% url 'device_backups' device.id as history_url %}
+{% include 'backups/_device_header.html' with title='Configuration' crumb='View' back_url=history_url back_label='All backups' %}
+
+<div class="panel">
+    <div class="panel-header flex-wrap">
+        <div>
+            <h2 class="panel-title">Backup from <time data-time="{{ backup.created|date:'c' }}"></time></h2>
+            <p class="panel-subtitle">
+                {{ lines|length }} lines · {{ backup.config|length|filesizeformat }}
+                {% if backup.config_hash %}· <span class="mono" title="SHA-256 {{ backup.config_hash }}">{{ backup.config_hash|slice:":10" }}</span>{% endif %}
+                {% if backup.changed %}· <span class="status is-warning ms-1"><i class="bi bi-arrow-left-right"></i> Changed</span>{% endif %}
+            </p>
+        </div>
+        <div class="d-flex gap-2 flex-wrap align-items-center">
+            <div class="input-icon" style="width: 240px;">
+                <i class="bi bi-search"></i>
+                <input type="search" class="input-nms mono" id="find" placeholder="Find in config" style="padding-left: 40px; font-size: 0.84rem;" aria-label="Find in configuration">
+            </div>
+            <span class="small text-muted-nms" id="find-count" style="min-width: 60px;"></span>
+            {% if previous %}
+            <a href="{% url 'backup_compare' device.id %}?a={{ previous.id }}&b={{ backup.id }}" class="btn-ghost" title="Compare with the previous backup"><i class="bi bi-file-diff"></i> Diff previous</a>
+            {% endif %}
+            <button type="button" class="btn-ghost" id="copy" title="Copy configuration"><i class="bi bi-clipboard"></i> Copy</button>
+            <a href="{% url 'backup_download' device.id backup.id %}" class="btn-ghost" title="Download"><i class="bi bi-download"></i></a>
+        </div>
+    </div>
+    <div class="code-scroll">
+        <table class="code-view" id="config">
+            <tbody>
+                {% for line in lines %}
+                <tr><td class="ln">{{ line.n }}</td><td class="k-{{ line.kind }}">{{ line.text }}</td></tr>
+                {% empty %}
+                <tr><td class="ln"></td><td class="k-comment">(empty configuration)</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    <div class="d-flex justify-content-between align-items-center px-3 py-2 border-top small" style="border-color: var(--border) !important;">
+        {% if previous %}<a href="{% url 'backup_detail' device.id previous.id %}" class="text-decoration-none"><i class="bi bi-chevron-left"></i> Older backup</a>{% else %}<span class="text-muted-nms">Oldest backup</span>{% endif %}
+        {% if next %}<a href="{% url 'backup_detail' device.id next.id %}" class="text-decoration-none">Newer backup <i class="bi bi-chevron-right"></i></a>{% else %}<span class="text-muted-nms">Latest backup</span>{% endif %}
+    </div>
+</div>
+<textarea id="raw-config" hidden>{{ backup.config }}</textarea>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(() => {
+    const rows = [...document.querySelectorAll('#config tr')];
+    const find = document.getElementById('find');
+    const count = document.getElementById('find-count');
+    let matches = [];
+    let current = -1;
+
+    function focusMatch(i) {
+        rows.forEach(r => r.classList.remove('is-current'));
+        if (!matches.length) return;
+        current = (i + matches.length) % matches.length;
+        matches[current].classList.add('is-current');
+        matches[current].scrollIntoView({ block: 'center' });
+        count.textContent = `${current + 1} of ${matches.length}`;
+    }
+
+    find.addEventListener('input', () => {
+        const term = find.value.trim().toLowerCase();
+        matches = [];
+        rows.forEach(row => {
+            const hit = term && row.cells[1].textContent.toLowerCase().includes(term);
+            row.classList.toggle('is-match', !!hit);
+            if (hit) matches.push(row);
+        });
+        count.textContent = term ? (matches.length ? '' : 'No matches') : '';
+        focusMatch(0);
+    });
+    // Enter / Shift+Enter jump between matches
+    find.addEventListener('keydown', e => {
+        if (e.key === 'Enter') { e.preventDefault(); focusMatch(current + (e.shiftKey ? -1 : 1)); }
+    });
+
+    document.getElementById('copy').addEventListener('click', async event => {
+        const button = event.currentTarget;
+        await navigator.clipboard.writeText(document.getElementById('raw-config').value);
+        button.innerHTML = '<i class="bi bi-check2"></i> Copied';
+        setTimeout(() => { button.innerHTML = '<i class="bi bi-clipboard"></i> Copy'; }, 1500);
+    });
+})();
+</script>
+{% endblock %}

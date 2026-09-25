@@ -1,0 +1,8 @@
+{% extends 'net_tools/terminal_tool.html' %}
+
+{% block title %}Ping{% endblock %}
+{% block tool_name %}Ping{% endblock %}
+{% block tool_description %}Check host reachability and round-trip latency{% endblock %}
+{% block tool_url %}{% url 'ping' %}{% endblock %}
+{% block running_text %}Pinging{% endblock %}
+{% block done_text %}Ping complete{% endblock %}

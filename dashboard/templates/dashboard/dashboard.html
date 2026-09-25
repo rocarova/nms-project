@@ -1,0 +1,379 @@
+{% extends 'system_management/base.html' %}
+
+{% block title %}Dashboard{% endblock %}
+
+{% block content %}
+<style>
+    /* Syslog volume chart */
+    .chart-wrap { position: relative; }
+    .chart-wrap svg { display: block; width: 100%; overflow: visible; }
+    .chart-grid { stroke: rgba(148, 163, 184, 0.10); stroke-width: 1; }
+    .chart-axis { stroke: rgba(148, 163, 184, 0.25); stroke-width: 1; }
+    .chart-tick { fill: var(--muted); font-size: 11px; font-family: var(--font-sans); font-variant-numeric: tabular-nums; }
+    .chart-bar { fill: var(--series-1); transition: opacity 0.12s; }
+    .chart-wrap.is-hovering .chart-bar { opacity: 0.45; }
+    .chart-wrap.is-hovering .chart-bar.is-active { opacity: 1; }
+    .chart-hit { fill: transparent; cursor: default; }
+    .chart-tooltip {
+        position: absolute; pointer-events: none; z-index: 5;
+        background: var(--surface-3); border: 1px solid var(--border-strong); border-radius: 8px;
+        padding: 8px 10px; font-size: 0.8rem; white-space: nowrap;
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4); transform: translate(-50%, calc(-100% - 10px));
+        opacity: 0; transition: opacity 0.1s;
+    }
+    .chart-tooltip.is-visible { opacity: 1; }
+    .chart-tooltip .t-label { color: var(--text-2); }
+    .chart-tooltip .t-value { font-weight: 600; color: var(--text); }
+    .chart-empty {
+        position: absolute; inset: 0 0 28px 40px; display: grid; place-items: center; text-align: center;
+        color: var(--muted); font-size: 0.88rem; pointer-events: none;
+    }
+
+    /* Severity breakdown */
+    .sev-row { display: grid; grid-template-columns: 92px 1fr 52px; align-items: center; gap: 12px; padding: 7px 0; }
+    .sev-label { display: flex; align-items: center; gap: 8px; font-size: 0.85rem; color: var(--text-2); }
+    .sev-swatch { width: 8px; height: 8px; border-radius: 2px; flex-shrink: 0; }
+    .sev-track { height: 8px; border-radius: 4px; background: rgba(148, 163, 184, 0.08); overflow: hidden; }
+    .sev-fill { height: 100%; border-radius: 0 4px 4px 0; min-width: 0; }
+    .sev-count { text-align: right; font-size: 0.85rem; color: var(--text); font-variant-numeric: tabular-nums; }
+
+    .sev-0, .sev-1, .sev-2 { background: var(--critical); }
+    .sev-3 { background: var(--serious); }
+    .sev-4 { background: var(--warning); }
+    .sev-5, .sev-6, .sev-7 { background: var(--series-1); }
+    .sev-unknown { background: var(--muted); }
+
+    /* Backup coverage meter */
+    .coverage-bar { display: flex; gap: 2px; height: 10px; border-radius: 5px; overflow: hidden; background: rgba(148, 163, 184, 0.08); }
+    .coverage-bar span { height: 100%; }
+    .coverage-bar .ok { background: var(--good); }
+    .coverage-bar .failed { background: var(--critical); }
+    .coverage-bar .never { background: var(--surface-3); }
+    .coverage-legend { display: flex; flex-wrap: wrap; gap: 6px 18px; margin-top: 12px; font-size: 0.8rem; color: var(--text-2); }
+    .coverage-legend i { margin-right: 4px; }
+
+    .change-detail { font-family: var(--font-mono); font-size: 0.78rem; color: var(--text-2); max-width: 420px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+</style>
+
+<div class="page-header">
+    <div>
+        <div class="page-eyebrow">Monitor</div>
+        <h1 class="page-title">Network overview</h1>
+        <p class="page-subtitle">Switch inventory, backup health and configuration changes · last 24 hours</p>
+    </div>
+    <div class="d-flex gap-2">
+        <a href="{% url 'syslog' %}" class="btn-ghost"><i class="bi bi-journal-code"></i> Live syslog</a>
+        <a href="{% url 'add_device' %}" class="btn-accent"><i class="bi bi-plus-lg"></i> Add switch</a>
+    </div>
+</div>
+
+<!-- KPI tiles -->
+<div class="row g-3 mb-3">
+    <div class="col-sm-6 col-xl-3">
+        <div class="panel kpi kpi-accent">
+            <div class="kpi-top">
+                <span class="kpi-label">Switches managed</span>
+                <span class="kpi-icon"><i class="bi bi-hdd-rack"></i></span>
+            </div>
+            <div class="kpi-value">{{ total_devices }}</div>
+            <div class="kpi-foot">{{ enabled_devices }} enabled</div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-xl-3">
+        <div class="panel kpi kpi-good">
+            <div class="kpi-top">
+                <span class="kpi-label">Backed up</span>
+                <span class="kpi-icon"><i class="bi bi-shield-check"></i></span>
+            </div>
+            <div class="kpi-value">{{ backup_ok }}</div>
+            <div class="kpi-foot">Latest backup succeeded</div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-xl-3">
+        <div class="panel kpi kpi-critical">
+            <div class="kpi-top">
+                <span class="kpi-label">Backup failed</span>
+                <span class="kpi-icon"><i class="bi bi-x-octagon"></i></span>
+            </div>
+            <div class="kpi-value">{{ backup_failed }}</div>
+            <div class="kpi-foot">{{ backup_never }} never backed up</div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-xl-3">
+        <div class="panel kpi kpi-warning">
+            <div class="kpi-top">
+                <span class="kpi-label">Config changed</span>
+                <span class="kpi-icon"><i class="bi bi-arrow-left-right"></i></span>
+            </div>
+            <div class="kpi-value">{{ changed_count }}</div>
+            <div class="kpi-foot">Switches changed in the last 24h</div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-3 mb-3">
+    <!-- Syslog volume -->
+    <div class="col-lg-8">
+        <div class="panel h-100">
+            <div class="panel-header">
+                <div>
+                    <h2 class="panel-title">Syslog volume</h2>
+                    <p class="panel-subtitle">Messages received per hour</p>
+                </div>
+                <span class="status is-muted"><i class="bi bi-envelope"></i> {{ syslog_total }} in 24h</span>
+            </div>
+            <div class="panel-body">
+                <div class="chart-wrap" id="volume-chart">
+                    <svg height="220" role="img" aria-label="Syslog messages per hour over the last 24 hours"></svg>
+                    <div class="chart-tooltip" id="volume-tooltip"></div>
+                    {% if not syslog_total %}
+                    <div class="chart-empty">
+                        <div>
+                            <i class="bi bi-broadcast d-block fs-3 mb-2"></i>
+                            No syslog received yet.<br>Point your switches at this server on UDP/TCP 514.
+                        </div>
+                    </div>
+                    {% endif %}
+                </div>
+                <!-- Table view of the chart for screen readers -->
+                <table class="visually-hidden">
+                    <caption>Syslog messages per hour</caption>
+                    <thead><tr><th>Hour</th><th>Messages</th></tr></thead>
+                    <tbody>{% for bucket in syslog_hourly %}<tr><td><time data-time="{{ bucket.t }}"></time></td><td>{{ bucket.n }}</td></tr>{% endfor %}</tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Severity breakdown -->
+    <div class="col-lg-4">
+        <div class="panel h-100">
+            <div class="panel-header">
+                <div>
+                    <h2 class="panel-title">By severity</h2>
+                    <p class="panel-subtitle">Last 24 hours</p>
+                </div>
+                <a href="{% url 'syslog' %}" class="btn-icon" title="Open syslog"><i class="bi bi-arrow-up-right"></i></a>
+            </div>
+            <div class="panel-body pt-3">
+                {% for row in severity_rows %}
+                <div class="sev-row" title="{{ row.label }}: {{ row.n }} messages">
+                    <span class="sev-label"><span class="sev-swatch sev-{{ row.level|default_if_none:'unknown' }}"></span>{{ row.label }}</span>
+                    <span class="sev-track"><span class="sev-fill d-block sev-{{ row.level|default_if_none:'unknown' }}" style="width: {% widthratio row.n severity_max 100 %}%"></span></span>
+                    <span class="sev-count">{{ row.n }}</span>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-3">
+    <!-- Recent config changes -->
+    <div class="col-xl-7">
+        <div class="panel h-100">
+            <div class="panel-header">
+                <div>
+                    <h2 class="panel-title">Recent configuration changes</h2>
+                    <p class="panel-subtitle">From syslog events and backup comparisons</p>
+                </div>
+            </div>
+            {% if recent_changes %}
+            <div class="table-responsive">
+                <table class="data-table">
+                    <thead><tr><th>When</th><th>Switch</th><th>Detected by</th><th>Detail</th></tr></thead>
+                    <tbody>
+                        {% for change in recent_changes %}
+                        <tr>
+                            <td class="text-nowrap"><time data-time="{{ change.at|date:'c' }}" data-format="relative"></time></td>
+                            <td>
+                                <div class="primary-cell">{{ change.device|default:"Unknown device" }}</div>
+                                <span class="mono small text-muted-nms">{{ change.ip }}</span>
+                            </td>
+                            <td>
+                                {% if change.source == 'Syslog' %}
+                                <span class="status is-warning"><i class="bi bi-journal-code"></i> Syslog</span>
+                                {% else %}
+                                <span class="status is-warning"><i class="bi bi-file-diff"></i> Backup diff</span>
+                                {% endif %}
+                            </td>
+                            <td><div class="change-detail" title="{{ change.detail }}">{{ change.detail }}</div></td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="empty-state">
+                <i class="bi bi-check2-circle"></i>
+                <div class="title">No configuration changes</div>
+                Nothing has changed in the last 24 hours.
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Backup health -->
+    <div class="col-xl-5">
+        <div class="panel h-100">
+            <div class="panel-header">
+                <div>
+                    <h2 class="panel-title">Backup health</h2>
+                    <p class="panel-subtitle">Based on each switch's latest backup</p>
+                </div>
+            </div>
+            {% if total_devices %}
+            <div class="panel-body border-bottom" style="border-color: var(--border) !important;">
+                <div class="coverage-bar" role="img" aria-label="{{ backup_ok }} backed up, {{ backup_failed }} failed, {{ backup_never }} never backed up">
+                    {% if backup_ok %}<span class="ok" style="width: {% widthratio backup_ok total_devices 100 %}%"></span>{% endif %}
+                    {% if backup_failed %}<span class="failed" style="width: {% widthratio backup_failed total_devices 100 %}%"></span>{% endif %}
+                    {% if backup_never %}<span class="never" style="flex: 1"></span>{% endif %}
+                </div>
+                <div class="coverage-legend">
+                    <span><i class="bi bi-check-circle-fill" style="color: var(--good-bright)"></i> Backed up <strong class="text-body">{{ backup_ok }}</strong></span>
+                    <span><i class="bi bi-x-circle-fill" style="color: var(--critical-bright)"></i> Failed <strong class="text-body">{{ backup_failed }}</strong></span>
+                    <span><i class="bi bi-dash-circle" style="color: var(--muted)"></i> Never <strong class="text-body">{{ backup_never }}</strong></span>
+                </div>
+            </div>
+            {% if attention_devices %}
+            <div class="table-responsive">
+                <table class="data-table">
+                    <thead><tr><th>Needs attention</th><th>Status</th><th>Last attempt</th></tr></thead>
+                    <tbody>
+                        {% for device in attention_devices %}
+                        <tr>
+                            <td>
+                                <div class="primary-cell">{{ device.hostname }}</div>
+                                <span class="small text-muted-nms">{{ device.location }}</span>
+                            </td>
+                            <td>
+                                {% if device.last_backup_status == 'failed' %}
+                                <span class="status is-critical"><i class="bi bi-x-circle-fill"></i> Failed</span>
+                                {% else %}
+                                <span class="status is-muted"><i class="bi bi-dash-circle"></i> Never</span>
+                                {% endif %}
+                            </td>
+                            <td class="text-nowrap">
+                                {% if device.last_backup_at %}<time data-time="{{ device.last_backup_at|date:'c' }}" data-format="relative"></time>{% else %}<span class="text-muted-nms">—</span>{% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="empty-state">
+                <i class="bi bi-shield-check"></i>
+                <div class="title">All switches backed up</div>
+                Every switch's latest backup succeeded.
+            </div>
+            {% endif %}
+            {% else %}
+            <div class="empty-state">
+                <i class="bi bi-hdd-rack"></i>
+                <div class="title">No switches yet</div>
+                <a href="{% url 'add_device' %}">Add your first switch</a> to start tracking backups.
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+{{ syslog_hourly|json_script:"hourly-data" }}
+{% endblock %}
+
+{% block scripts %}
+<script>
+(() => {
+    const data = JSON.parse(document.getElementById('hourly-data').textContent).map(d => ({ t: new Date(d.t), n: d.n }));
+    const wrap = document.getElementById('volume-chart');
+    const svg = wrap.querySelector('svg');
+    const tooltip = document.getElementById('volume-tooltip');
+    const NS = 'http://www.w3.org/2000/svg';
+
+    // Round the axis top up to a clean 1/2/5 x 10^n step
+    function niceStep(raw) {
+        const pow = Math.pow(10, Math.floor(Math.log10(raw)));
+        return [1, 2, 5, 10].map(m => m * pow).find(s => s >= raw);
+    }
+
+    function el(name, attrs) {
+        const node = document.createElementNS(NS, name);
+        for (const [k, v] of Object.entries(attrs)) node.setAttribute(k, v);
+        return node;
+    }
+
+    // Column with a 4px rounded top, square at the baseline
+    function barPath(x, y, w, h) {
+        const r = Math.min(4, h, w / 2);
+        return `M${x},${y + h}V${y + r}Q${x},${y} ${x + r},${y}H${x + w - r}Q${x + w},${y} ${x + w},${y + r}V${y + h}Z`;
+    }
+
+    const hourFmt = d => d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+    function render() {
+        const W = wrap.clientWidth, H = 220;
+        const m = { t: 12, r: 4, b: 28, l: 40 };
+        const iw = W - m.l - m.r, ih = H - m.t - m.b;
+        const max = Math.max(...data.map(d => d.n));
+        const step = niceStep(Math.max(max, 4) / 4);
+        const top = Math.ceil(Math.max(max, 1) / step) * step;
+        const y = v => m.t + ih - (v / top) * ih;
+        const band = iw / data.length;
+        const bw = Math.min(24, band * 0.6);
+
+        svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+        svg.replaceChildren();
+
+        for (let v = 0; v <= top; v += step) {
+            svg.append(el('line', { x1: m.l, x2: W - m.r, y1: y(v), y2: y(v), class: v === 0 ? 'chart-axis' : 'chart-grid' }));
+            const label = el('text', { x: m.l - 8, y: y(v) + 4, 'text-anchor': 'end', class: 'chart-tick' });
+            label.textContent = v.toLocaleString();
+            svg.append(label);
+        }
+
+        const labelEvery = band < 22 ? 6 : 3;
+        data.forEach((d, i) => {
+            const x = m.l + i * band + (band - bw) / 2;
+            const h = (d.n / top) * ih;
+            const bar = el('path', { d: h > 0 ? barPath(x, y(d.n), bw, h) : '', class: 'chart-bar' });
+            svg.append(bar);
+
+            if (i % labelEvery === 0) {
+                const label = el('text', { x: x + bw / 2, y: H - 8, 'text-anchor': 'middle', class: 'chart-tick' });
+                label.textContent = hourFmt(d.t);
+                svg.append(label);
+            }
+
+            // Full-band hit target so thin/zero bars are still hoverable
+            const hit = el('rect', { x: m.l + i * band, y: m.t, width: band, height: ih, class: 'chart-hit' });
+            hit.addEventListener('mouseenter', () => {
+                wrap.classList.add('is-hovering');
+                bar.classList.add('is-active');
+                const end = new Date(d.t.getTime() + 3600e3);
+                tooltip.innerHTML = '';
+                const label = document.createElement('div');
+                label.className = 't-label';
+                label.textContent = `${hourFmt(d.t)} – ${hourFmt(end)}`;
+                const value = document.createElement('div');
+                value.className = 't-value';
+                value.textContent = `${d.n.toLocaleString()} message${d.n === 1 ? '' : 's'}`;
+                tooltip.append(label, value);
+                tooltip.style.left = `${Math.min(Math.max(x + bw / 2, 70), W - 70)}px`;
+                tooltip.style.top = `${y(d.n)}px`;
+                tooltip.classList.add('is-visible');
+            });
+            hit.addEventListener('mouseleave', () => {
+                wrap.classList.remove('is-hovering');
+                bar.classList.remove('is-active');
+                tooltip.classList.remove('is-visible');
+            });
+            svg.append(hit);
+        });
+    }
+
+    render();
+    new ResizeObserver(render).observe(wrap);
+})();
+</script>
+{% endblock %}

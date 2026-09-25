@@ -1,0 +1,37 @@
+{% extends 'system_management/base.html' %}
+
+{% block title %}Network tools{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="page-eyebrow">Manage</div>
+        <h1 class="page-title">Network tools</h1>
+        <p class="page-subtitle">Run diagnostics from the NMS server</p>
+    </div>
+</div>
+
+<div class="row g-3">
+    <div class="col-md-6 col-xl-4">
+        <a href="{% url 'ping' %}" class="panel tool-card">
+            <div class="tool-icon"><i class="bi bi-broadcast"></i></div>
+            <h3>Ping</h3>
+            <p>Check host reachability and latency.</p>
+        </a>
+    </div>
+    <div class="col-md-6 col-xl-4">
+        <a href="{% url 'traceroute' %}" class="panel tool-card">
+            <div class="tool-icon"><i class="bi bi-signpost-split"></i></div>
+            <h3>Traceroute</h3>
+            <p>Trace the path of packets across the network.</p>
+        </a>
+    </div>
+    <div class="col-md-6 col-xl-4">
+        <a href="{% url 'nslookup' %}" class="panel tool-card">
+            <div class="tool-icon"><i class="bi bi-search"></i></div>
+            <h3>nslookup</h3>
+            <p>Query DNS records for a given domain or IP.</p>
+        </a>
+    </div>
+</div>
+{% endblock %}

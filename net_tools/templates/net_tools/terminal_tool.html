@@ -1,0 +1,81 @@
+{% extends 'system_management/base.html' %}
+{% comment %}
+    Shared page for streaming command tools. Child templates set: title, tool_name, tool_description,
+    tool_url, running_text and done_text, and optionally target_placeholder and extra_fields
+    (inputs with a name="" are sent to the tool as query parameters).
+{% endcomment %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="page-eyebrow"><a href="{% url 'tools' %}" class="text-decoration-none">Network tools</a></div>
+        <h1 class="page-title">{% block tool_name %}{% endblock %}</h1>
+        <p class="page-subtitle">{% block tool_description %}{% endblock %}</p>
+    </div>
+    <a href="{% url 'tools' %}" class="btn-ghost"><i class="bi bi-arrow-left"></i> All tools</a>
+</div>
+
+<div class="panel p-3 mb-3">
+    <form class="d-flex flex-wrap gap-2" id="tool-form" data-url="{% block tool_url %}{% endblock %}"
+          data-running="{% block running_text %}{% endblock %}" data-done="{% block done_text %}{% endblock %}">
+        <div class="flex-grow-1 position-relative" style="min-width: 240px;">
+            <i class="bi bi-crosshair position-absolute text-muted-nms" style="left: 14px; top: 50%; transform: translateY(-50%);"></i>
+            <input type="text" class="input-nms mono" id="target" name="target" placeholder="{% block target_placeholder %}Hostname or IP, e.g. core-sw1 or 8.8.8.8{% endblock %}"
+                   style="padding-left: 40px;" required autofocus aria-label="Target">
+        </div>
+        {% block extra_fields %}{% endblock %}
+        <button type="submit" class="btn-accent" id="run"><i class="bi bi-play-fill"></i> Run</button>
+    </form>
+</div>
+
+<div class="terminal-bar">
+    <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+    <span class="ms-2" id="terminal-title">idle</span>
+</div>
+<div class="terminal" id="console">Ready. Enter a target and press Run.</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(() => {
+    const form = document.getElementById('tool-form');
+    const consoleBox = document.getElementById('console');
+    const title = document.getElementById('terminal-title');
+    const runButton = document.getElementById('run');
+
+    form.addEventListener('submit', async event => {
+        event.preventDefault();
+        const target = document.getElementById('target').value.trim();
+        if (!target) return;
+
+        // textContent (not innerHTML) so the target and output are never rendered as HTML
+        consoleBox.textContent = `${form.dataset.running} ${target}...\n`;
+        title.textContent = `${form.dataset.url.replace(/\//g, '')} ${target}`;
+        runButton.disabled = true;
+
+        try {
+            // Sends every named field in the form (target plus any tool-specific options)
+            const params = new URLSearchParams(new FormData(form));
+            params.set('target', target);
+            const response = await fetch(`${form.dataset.url}?${params}`);
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+
+            while (true) {
+                const { value, done } = await reader.read();
+                if (done) break;
+                consoleBox.textContent += decoder.decode(value, { stream: true });
+                consoleBox.scrollTop = consoleBox.scrollHeight;
+            }
+
+            if (response.ok) consoleBox.textContent += `\n--- ${form.dataset.done} ---\n`;
+        } catch (e) {
+            consoleBox.textContent += `\nError: ${e.message}`;
+        } finally {
+            runButton.disabled = false;
+            consoleBox.scrollTop = consoleBox.scrollHeight;
+        }
+    });
+})();
+</script>
+{% endblock %}

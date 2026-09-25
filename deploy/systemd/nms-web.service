@@ -1,0 +1,27 @@
+# NetOps Center web app (Django over ASGI, served by Daphne behind nginx).
+# Install: sudo cp deploy/systemd/nms-web.service /etc/systemd/system/ && sudo systemctl enable --now nms-web
+
+[Unit]
+Description=NetOps Center web app
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=nms
+Group=nms
+WorkingDirectory=/opt/nms
+EnvironmentFile=/opt/nms/.env
+# Only reachable through nginx; --proxy-headers trusts X-Forwarded-For/Proto from it
+ExecStart=/opt/nms/.venv/bin/daphne --bind 127.0.0.1 --port 8000 --proxy-headers nms.asgi:application
+Restart=on-failure
+RestartSec=5
+
+# Hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+
+[Install]
+WantedBy=multi-user.target

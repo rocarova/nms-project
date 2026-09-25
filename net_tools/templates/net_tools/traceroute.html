@@ -1,0 +1,8 @@
+{% extends 'net_tools/terminal_tool.html' %}
+
+{% block title %}Traceroute{% endblock %}
+{% block tool_name %}Traceroute{% endblock %}
+{% block tool_description %}Trace the path packets take across the network{% endblock %}
+{% block tool_url %}{% url 'traceroute' %}{% endblock %}
+{% block running_text %}Tracing route to{% endblock %}
+{% block done_text %}Trace complete{% endblock %}
