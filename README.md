@@ -17,11 +17,12 @@ Built with Django 5.2 (LTS), Channels/Daphne and PostgreSQL.
 | **Network tools** | Ping, traceroute and nslookup run from the server, with output streamed live. |
 | **Email alerts** | Emails when a backup fails or a device's configuration changes (from a backup comparison or a config-change syslog message, at most once per device per 15 minutes). Includes a test-email button. |
 | **Settings** | Change password, syslog port and retention, backup schedule and retention, SMTP server and notification settings. |
+| **HTTPS certificate** | Settings -> Certificate: generate a private key and CSR, download it for your CA, and install the signed certificate (PEM, DER or PKCS#7, chain included). Self-signed certificates for a quick start. The private key never leaves the server; nginx reloads automatically. |
 
 ## Architecture
 
 ```
-Browser ──HTTP/WebSocket──> nginx ──> Daphne (Django ASGI app) ──SSH──> network devices
+Browser ──HTTPS/WSS──> nginx (TLS) ──> Daphne (Django ASGI app) ──SSH──> network devices
                                            │
 Devices ──syslog UDP/TCP 514──> syslog listener (manage.py syslog_server)
                                            │
@@ -61,7 +62,11 @@ python manage.py syslog_test [--tcp] [--port 514]   # send sample syslog message
 python manage.py demo_backups [hostname ...]        # sample backup history to try compare/view
 python manage.py demo_backups --clear               # remove the sample backups
 python manage.py test                               # run the test suite
+python manage.py nms_certificate selfsigned --cn <host-or-ip>   # certificate for HTTPS
+python manage.py serve_https [--port 443]           # serve over HTTPS directly (no nginx)
 ```
+
+`runserver` is plain HTTP, so set `DJANGO_SECURE=False` in `.env` while using it (secure cookies need HTTPS).
 
 ## Configuration
 
@@ -73,10 +78,11 @@ All settings are environment variables, read from `.env` in the project root. Se
 | `DJANGO_DEBUG` | `False` | Detailed error pages; local development only |
 | `DJANGO_ALLOWED_HOSTS` | `localhost,127.0.0.1` | Hostnames/IPs the site is served on |
 | `DATABASE_URL` | SQLite `db.sqlite3` | e.g. `postgres://nms:pass@localhost:5432/nms` |
-| `DJANGO_SECURE` | `False` | Set `True` once served over HTTPS |
+| `DJANGO_SECURE` | `False` | `True` on a server: HTTPS-only cookies, HTTP redirects to HTTPS |
 | `DJANGO_CSRF_TRUSTED_ORIGINS` | – | e.g. `https://nms.example.com` |
 | `NMS_ALLOW_SIGNUP` | `False` | Allow public account registration |
 | `DJANGO_TIME_ZONE` | `UTC` | Server time zone (the UI shows each viewer's local time) |
+| `NMS_CERT_DIR` | `./certs` | Where the HTTPS certificate and private key are kept |
 | `NMS_BASE_URL` | – | e.g. `https://nms.example.com`; adds "open in NetOps Center" links to emails |
 
 ## Deployment

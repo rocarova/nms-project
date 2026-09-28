@@ -57,7 +57,13 @@ DJANGO_ALLOWED_HOSTS=nms.example.com
 DATABASE_URL=postgres://nms:change-me@localhost:5432/nms
 DJANGO_DEBUG=False
 DJANGO_STATIC_ROOT=/opt/nms/staticfiles
+DJANGO_SECURE=True
+DJANGO_CSRF_TRUSTED_ORIGINS=https://nms.example.com
+NMS_BASE_URL=https://nms.example.com
+NMS_CERT_DIR=/opt/nms/certs
 ```
+
+`DJANGO_SECURE=True` makes login cookies HTTPS-only, so the site must be reached over HTTPS (set up in step 8).
 
 ## 6. Initialize the app
 
@@ -66,32 +72,38 @@ sudo -u nms .venv/bin/python manage.py migrate
 sudo -u nms .venv/bin/python manage.py collectstatic --noinput
 sudo -u nms .venv/bin/python manage.py createsuperuser
 sudo -u nms .venv/bin/python manage.py check --deploy
+
+# A self-signed certificate so HTTPS works from the start (replace it with a CA-signed one in step 10)
+sudo -u nms .venv/bin/python manage.py nms_certificate selfsigned --cn nms.example.com --san <server-ip>
 ```
 
 ## 7. systemd services
 
 ```bash
-sudo cp deploy/systemd/nms-web.service deploy/systemd/nms-syslog.service /etc/systemd/system/
+sudo cp deploy/systemd/nms-*.service deploy/systemd/nms-cert-reload.path /etc/systemd/system/
 sudo systemctl daemon-reload
-sudo systemctl enable --now nms-web nms-syslog
+sudo systemctl enable --now nms-web nms-syslog nms-cert-reload.path
 sudo systemctl status nms-web nms-syslog
 ```
 
 - `nms-web` serves the app on `127.0.0.1:8000` (only nginx can reach it).
 - `nms-syslog` listens on UDP/TCP 514 (or the port set in **Settings → Syslog**). It gets the
   `CAP_NET_BIND_SERVICE` capability so it can bind to 514 without running as root.
+- `nms-cert-reload.path` reloads nginx whenever a new certificate is installed from **Settings → Certificate**
+  (it runs `nginx -t` first, so a bad certificate never takes the site down).
 
 ## 8. nginx
 
 ```bash
 sudo cp deploy/nginx/nms.conf /etc/nginx/sites-available/nms
-sudo nano /etc/nginx/sites-available/nms          # set server_name
+sudo nano /etc/nginx/sites-available/nms          # set server_name in both server blocks
 sudo ln -s /etc/nginx/sites-available/nms /etc/nginx/sites-enabled/nms
 sudo rm -f /etc/nginx/sites-enabled/default
 sudo nginx -t && sudo systemctl reload nginx
 ```
 
-Open `http://nms.example.com` and sign in with the superuser you created.
+Open `https://nms.example.com` and sign in with the superuser you created. The browser warns about the
+self-signed certificate until step 10; `http://` redirects to `https://`.
 
 ## 9. Firewall
 
@@ -106,25 +118,25 @@ sudo ufw enable
 If you change the syslog port in Settings, open that port instead of 514. Ideally limit syslog to your
 management network, e.g. `sudo ufw allow from 10.0.99.0/24 to any port 514 proto udp`.
 
-## 10. HTTPS (recommended)
+## 10. Trusted certificate (CSR)
 
-With a public DNS name:
+In **Settings → Certificate**:
 
-```bash
-sudo apt install -y certbot python3-certbot-nginx
-sudo certbot --nginx -d nms.example.com
-```
+1. **Request a certificate**: enter the hostname (and any other names or IPs users browse to), then
+   **Generate CSR**. The private key is created on the server and never leaves it.
+2. **Download CSR** (or copy it) and submit it to your certificate authority (e.g. your company's
+   Active Directory CA, or a commercial CA).
+3. **Install signed certificate**: upload what the CA returns (`.pem`, `.crt`, `.cer` or `.p7b`, ideally with
+   the intermediate chain). It's checked against the key, then nginx picks it up within seconds.
 
-For an internal-only server, use a certificate from your internal CA in the nginx config instead.
+A certificate and key issued elsewhere (e.g. a company wildcard) can be imported the same way, with its key.
+From the command line: `manage.py nms_certificate csr|install|status` (see `--help`).
 
-Then in `/opt/nms/.env`:
+Once browsers trust the certificate, consider HSTS: `DJANGO_HSTS_SECONDS=31536000` in `.env`, then
+`sudo systemctl restart nms-web`.
 
-```ini
-DJANGO_SECURE=True
-DJANGO_CSRF_TRUSTED_ORIGINS=https://nms.example.com
-```
-
-and `sudo systemctl restart nms-web`.
+> Using Let's Encrypt (public DNS name) instead? `sudo certbot --nginx -d nms.example.com` manages its own
+> certificate paths in the nginx config; the Settings → Certificate page then isn't used.
 
 ## 11. Point your network devices at the server
 
@@ -175,6 +187,8 @@ Store the dumps securely; they contain device credentials.
 | 502 Bad Gateway | `sudo systemctl status nms-web` and `journalctl -u nms-web -n 50` |
 | "Bad Request (400)" | The hostname you browse to isn't in `DJANGO_ALLOWED_HOSTS` |
 | CSRF error on login over HTTPS | `DJANGO_CSRF_TRUSTED_ORIGINS` must include `https://your-host` |
+| Can't log in over plain HTTP | Expected with `DJANGO_SECURE=True` (HTTPS-only cookies); use `https://` |
+| New certificate not used | `systemctl status nms-cert-reload.path`, and `journalctl -u nms-cert-reload` for nginx errors |
 | No syslog arriving | `journalctl -u nms-syslog -f`, the firewall, and Settings → Syslog (listener status) |
 | SSH console "Connection refused" | Open it from the inventory page on the same hostname the site is served on |
 | Page styles missing | Re-run `collectstatic`; check the `/static/` alias path in the nginx config |

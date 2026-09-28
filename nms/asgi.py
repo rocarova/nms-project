@@ -16,6 +16,11 @@ os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'nms.settings')
 # Initialize Django before importing anything that touches models
 django_asgi_app = get_asgi_application()
 
+if os.environ.get('NMS_SERVE_STATIC') == '1':
+    # Set by `manage.py serve_https`, which runs without nginx in front to serve CSS/JS
+    from django.contrib.staticfiles.handlers import ASGIStaticFilesHandler
+    django_asgi_app = ASGIStaticFilesHandler(django_asgi_app)
+
 from channels.auth import AuthMiddlewareStack  # noqa: E402
 from channels.routing import ProtocolTypeRouter, URLRouter  # noqa: E402
 from django.urls import path  # noqa: E402

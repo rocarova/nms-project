@@ -1,8 +1,8 @@
 {% if messages %}
 <div class="mb-3">
     {% for message in messages %}
-    <div class="flash {% if message.tags == 'error' %}is-error{% endif %}" role="status">
-        <i class="bi {% if message.tags == 'error' %}bi-exclamation-triangle-fill{% else %}bi-check-circle-fill{% endif %}"></i>
+    <div class="flash {% if message.tags == 'error' %}is-error{% elif message.tags == 'warning' %}is-warning{% endif %}" role="status">
+        <i class="bi {% if message.tags == 'error' or message.tags == 'warning' %}bi-exclamation-triangle-fill{% else %}bi-check-circle-fill{% endif %}"></i>
         <span>{{ message }}</span>
         <button type="button" class="btn-icon ms-auto" onclick="this.parentElement.remove()" aria-label="Dismiss"><i class="bi bi-x-lg"></i></button>
     </div>

@@ -22,3 +22,6 @@ media/
 .claude/
 Thumbs.db
 .DS_Store
+
+# TLS private keys and certificates (Settings -> Certificate)
+certs/

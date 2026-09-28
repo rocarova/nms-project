@@ -44,6 +44,9 @@ ALLOWED_HOSTS = env_list('DJANGO_ALLOWED_HOSTS', '*' if DEBUG else 'localhost,12
 # Full origins for HTTPS form posts behind a proxy, e.g. "https://nms.example.com"
 CSRF_TRUSTED_ORIGINS = env_list('DJANGO_CSRF_TRUSTED_ORIGINS')
 
+# HTTPS certificate files managed from Settings -> Certificate (nginx / serve_https read them from here)
+NMS_CERT_DIR = Path(os.environ.get('NMS_CERT_DIR', BASE_DIR / 'certs'))
+
 # Public self-registration. Off by default: create users with `manage.py createsuperuser` or the admin site.
 ALLOW_SIGNUP = env_bool('NMS_ALLOW_SIGNUP', False)
 

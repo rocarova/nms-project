@@ -30,6 +30,10 @@
     .listener-card .desc { color: var(--muted); font-size: 0.8rem; }
     .account-card { display: flex; align-items: center; gap: 14px; margin-bottom: 22px; }
     .account-card .avatar { width: 48px; height: 48px; font-size: 1.2rem; }
+    .cert-grid { display: grid; grid-template-columns: 140px 1fr; gap: 10px 16px; margin: 0; font-size: 0.88rem; }
+    .cert-grid dt { color: var(--muted); font-weight: 500; }
+    .cert-grid dd { margin: 0; color: var(--text); min-width: 0; }
+    @media (max-width: 575.98px) { .cert-grid { grid-template-columns: 1fr; gap: 2px; } .cert-grid dd { margin-bottom: 10px; } }
 </style>
 
 <div class="page-header">
@@ -56,6 +60,9 @@
             </button>
             <button type="button" role="tab" data-tab="email" aria-selected="{% if tab == 'email' %}true{% else %}false{% endif %}">
                 <i class="bi bi-envelope"></i><span>Email<small>Notifications</small></span>
+            </button>
+            <button type="button" role="tab" data-tab="certificate" aria-selected="{% if tab == 'certificate' %}true{% else %}false{% endif %}">
+                <i class="bi bi-shield-lock"></i><span>Certificate<small>HTTPS &amp; CSR</small></span>
             </button>
         </nav>
     </div>
@@ -258,6 +265,146 @@
                 </div>
             </form>
         </section>
+
+        <!-- Certificate -->
+        <section class="settings-pane" id="pane-certificate" role="tabpanel" {% if tab != 'certificate' %}hidden{% endif %}>
+            <!-- Installed certificate -->
+            <div class="panel mb-3">
+                <div class="panel-header">
+                    <div>
+                        <h2 class="panel-title">Installed certificate</h2>
+                        <p class="panel-subtitle">The certificate this site uses for HTTPS</p>
+                    </div>
+                    {% if certificate %}
+                        {% if certificate.expired %}
+                        <span class="status is-critical"><i class="bi bi-x-circle-fill"></i> Expired</span>
+                        {% elif certificate.expiring_soon %}
+                        <span class="status is-warning"><i class="bi bi-exclamation-triangle-fill"></i> Expires in {{ certificate.days_left }} day{{ certificate.days_left|pluralize }}</span>
+                        {% elif certificate.self_signed %}
+                        <span class="status is-warning"><i class="bi bi-exclamation-triangle-fill"></i> Self-signed</span>
+                        {% else %}
+                        <span class="status is-good"><i class="bi bi-shield-check"></i> Valid</span>
+                        {% endif %}
+                    {% endif %}
+                </div>
+                {% if certificate %}
+                <div class="panel-body">
+                    <dl class="cert-grid">
+                        <dt>Common name</dt><dd class="mono">{{ certificate.common_name }}</dd>
+                        <dt>Names covered</dt><dd>{% for name in certificate.sans %}<span class="ip-chip me-1">{{ name }}</span>{% empty %}<span class="text-muted-nms">none</span>{% endfor %}</dd>
+                        <dt>Issued by</dt><dd>{{ certificate.issuer_cn }}{% if certificate.self_signed %} <span class="text-muted-nms">(itself)</span>{% endif %}</dd>
+                        <dt>Valid</dt><dd>{{ certificate.not_before|date:"Y-m-d" }} → {{ certificate.not_after|date:"Y-m-d" }} <span class="text-muted-nms">({{ certificate.days_left }} days left)</span></dd>
+                        <dt>Key</dt><dd>{{ certificate.key }}</dd>
+                        <dt>Chain</dt><dd>{{ certificate.chain_length }} certificate{{ certificate.chain_length|pluralize }}</dd>
+                        <dt>SHA-256</dt><dd class="mono small text-break">{{ certificate.fingerprint }}</dd>
+                    </dl>
+                    {% if certificate.self_signed %}
+                    <div class="notice mb-0 mt-3"><i class="bi bi-info-circle-fill"></i><div>Browsers show a warning for a self-signed certificate. Request one from your certificate authority below to replace it.</div></div>
+                    {% endif %}
+                    <a href="{% url 'download_certificate' %}" class="btn-ghost mt-3"><i class="bi bi-download"></i> Download certificate</a>
+                </div>
+                {% else %}
+                <div class="empty-state">
+                    <i class="bi bi-shield-slash"></i>
+                    <div class="title">No certificate installed</div>
+                    Create a self-signed certificate to turn on HTTPS right away, then request a trusted one from your CA.
+                </div>
+                {% endif %}
+            </div>
+
+            <!-- Pending request -->
+            {% if pending %}
+            <div class="panel mb-3" style="border-color: rgba(34, 211, 238, 0.35);">
+                <div class="panel-header">
+                    <div>
+                        <h2 class="panel-title"><i class="bi bi-hourglass-split me-2" style="color: var(--accent)"></i>Waiting for your CA</h2>
+                        <p class="panel-subtitle">Request for <span class="mono">{{ pending.common_name }}</span> created <time data-time="{{ pending.created|date:'c' }}" data-format="relative"></time> · {{ pending.key }}</p>
+                    </div>
+                </div>
+                <div class="panel-body">
+                    <p class="small text-2 mb-2">Send this CSR to your certificate authority, e.g. paste it into your CA's request form. Names requested:
+                        {% for name in pending.sans %}<span class="ip-chip me-1">{{ name }}</span>{% endfor %}</p>
+                    <textarea class="input-nms mono small" id="csr-pem" rows="7" readonly>{{ pending.pem }}</textarea>
+                    <div class="d-flex flex-wrap gap-2 mt-3">
+                        <a href="{% url 'download_csr' %}" class="btn-accent"><i class="bi bi-download"></i> Download CSR</a>
+                        <button type="button" class="btn-ghost" id="copy-csr"><i class="bi bi-clipboard"></i> Copy</button>
+                        <form method="POST" class="ms-auto" id="discard-csr">
+                            {% csrf_token %}
+                            <input type="hidden" name="section" value="certificate">
+                            <button type="submit" name="action" value="cancel" class="btn-ghost is-danger"><i class="bi bi-x-lg"></i> Discard request</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- Request -->
+            <form method="POST" class="panel custom-device-form mb-3" id="csr-form" novalidate>
+                {% csrf_token %}
+                <input type="hidden" name="section" value="certificate">
+                {% with form=forms.csr %}
+                <div class="form-section">
+                    <div class="section-head">
+                        <span class="section-icon"><i class="bi bi-file-earmark-lock"></i></span>
+                        <div>
+                            <h2 class="section-title">Request a certificate</h2>
+                            <p class="section-subtitle">Generates a new private key on this server and a CSR for your CA. The key never leaves the server.</p>
+                        </div>
+                    </div>
+                    {% for error in form.non_field_errors %}<div class="alert-nms"><i class="bi bi-exclamation-triangle-fill"></i> <span>{{ error }}</span></div>{% endfor %}
+                    <div class="form-grid">
+                        {% include 'system_management/_settings_field.html' with field=form.common_name icon='globe2' %}
+                        {% include 'system_management/_settings_field.html' with field=form.key_type icon='key' %}
+                        <div class="grid-span-2">{% include 'system_management/_settings_field.html' with field=form.sans %}</div>
+                        {% include 'system_management/_settings_field.html' with field=form.organization icon='building' %}
+                        {% include 'system_management/_settings_field.html' with field=form.organizational_unit icon='diagram-3' %}
+                        {% include 'system_management/_settings_field.html' with field=form.locality icon='geo-alt' %}
+                        {% include 'system_management/_settings_field.html' with field=form.state icon='map' %}
+                        {% include 'system_management/_settings_field.html' with field=form.country icon='flag' %}
+                        {% include 'system_management/_settings_field.html' with field=form.email icon='at' %}
+                    </div>
+                    {% if pending %}<p class="small text-muted-nms mb-3"><i class="bi bi-info-circle me-1"></i>Generating a new CSR replaces the pending request above.</p>{% endif %}
+                </div>
+                {% endwith %}
+                <div class="form-footer">
+                    <button type="submit" name="action" value="selfsigned" class="btn-ghost" id="selfsigned-btn"
+                            data-confirm="{% if certificate and not certificate.self_signed %}Replace the installed CA-signed certificate with a self-signed one?{% endif %}"
+                            title="Install a self-signed certificate now (browsers will warn)">
+                        <i class="bi bi-shield-exclamation"></i> Create self-signed
+                    </button>
+                    <button type="submit" name="action" value="csr" class="btn-accent"><i class="bi bi-file-earmark-plus"></i> Generate CSR</button>
+                </div>
+            </form>
+
+            <!-- Install -->
+            <form method="POST" enctype="multipart/form-data" class="panel custom-device-form" novalidate>
+                {% csrf_token %}
+                <input type="hidden" name="section" value="certificate">
+                {% with form=forms.install %}
+                <div class="form-section">
+                    <div class="section-head">
+                        <span class="section-icon"><i class="bi bi-patch-check"></i></span>
+                        <div>
+                            <h2 class="section-title">Install signed certificate</h2>
+                            <p class="section-subtitle">Upload what your CA sent back. It's checked against the key before anything changes.</p>
+                        </div>
+                    </div>
+                    {% for error in form.non_field_errors %}<div class="alert-nms"><i class="bi bi-exclamation-triangle-fill"></i> <span>{{ error }}</span></div>{% endfor %}
+                    {% include 'system_management/_settings_field.html' with field=form.certificate_file %}
+                    {% include 'system_management/_settings_field.html' with field=form.certificate_text %}
+                    <details class="mb-3" {% if form.key_text.value %}open{% endif %}>
+                        <summary class="small text-2 mb-3" style="cursor: pointer;">Certificate and key created outside NetOps Center (e.g. a company wildcard)?</summary>
+                        {% include 'system_management/_settings_field.html' with field=form.key_file %}
+                        {% include 'system_management/_settings_field.html' with field=form.key_text %}
+                    </details>
+                </div>
+                {% endwith %}
+                <div class="form-footer">
+                    <span class="small text-muted-nms me-auto align-self-center">Stored in <span class="mono">{{ cert_dir }}</span></span>
+                    <button type="submit" name="action" value="install" class="btn-accent"><i class="bi bi-upload"></i> Install certificate</button>
+                </div>
+            </form>
+        </section>
     </div>
 </div>
 {% endblock %}
@@ -272,6 +419,19 @@
         document.querySelectorAll('.settings-pane').forEach(p => p.hidden = p.id !== `pane-${tab.dataset.tab}`);
         history.replaceState(null, '', `?tab=${tab.dataset.tab}`);
     }));
+
+    // Certificate: copy the CSR, and confirm the actions that throw something away
+    document.getElementById('copy-csr')?.addEventListener('click', async event => {
+        await navigator.clipboard.writeText(document.getElementById('csr-pem').value);
+        event.currentTarget.innerHTML = '<i class="bi bi-check2"></i> Copied';
+    });
+    document.getElementById('discard-csr')?.addEventListener('submit', event => {
+        if (!confirm('Discard this request? Its private key is deleted, so a certificate issued for it can no longer be installed.')) event.preventDefault();
+    });
+    const selfSigned = document.getElementById('selfsigned-btn');
+    selfSigned?.addEventListener('click', event => {
+        if (selfSigned.dataset.confirm && !confirm(selfSigned.dataset.confirm)) event.preventDefault();
+    });
 
     // Backups: only show time / weekday when they apply, and summarize the schedule
     const frequency = document.getElementById('id_backup_frequency');

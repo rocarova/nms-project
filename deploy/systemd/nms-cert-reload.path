@@ -1,0 +1,14 @@
+# Reloads nginx when a new HTTPS certificate is installed from Settings -> Certificate,
+# so the web app never needs root privileges.
+# Install: sudo cp deploy/systemd/nms-cert-reload.* /etc/systemd/system/ && sudo systemctl enable --now nms-cert-reload.path
+
+[Unit]
+Description=Watch the NetOps Center HTTPS certificate
+
+[Path]
+# fullchain.pem is written last (after the key), so this fires once both are in place
+PathChanged=/opt/nms/certs/fullchain.pem
+Unit=nms-cert-reload.service
+
+[Install]
+WantedBy=multi-user.target

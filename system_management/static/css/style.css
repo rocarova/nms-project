@@ -729,6 +729,8 @@ select.input-nms, .custom-device-form select { cursor: pointer; }
 .flash > i { color: var(--good-bright); }
 .flash.is-error { background: rgba(208, 59, 59, 0.1); border-color: rgba(208, 59, 59, 0.35); }
 .flash.is-error > i { color: var(--critical-bright); }
+.flash.is-warning { background: rgba(250, 178, 25, 0.1); border-color: rgba(250, 178, 25, 0.35); }
+.flash.is-warning > i { color: var(--warning); }
 @keyframes flash-in { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
 
 .alert-nms {

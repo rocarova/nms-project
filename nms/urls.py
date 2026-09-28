@@ -35,6 +35,8 @@ urlpatterns = [
     path('signup/', sm_views.signupuser, name='signup'),
     path('logout/', sm_views.logoutuser, name='logoutuser'),
     path('settings/', sm_views.settings_view, name='settings'),
+    path('settings/certificate/request.csr', sm_views.download_csr, name='download_csr'),
+    path('settings/certificate/certificate.pem', sm_views.download_certificate, name='download_certificate'),
 
     # Inventory
     path('dashboard/', dashboard_views.dashboard, name='dashboard'),

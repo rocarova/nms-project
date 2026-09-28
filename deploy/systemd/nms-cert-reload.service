@@ -1,0 +1,10 @@
+# Triggered by nms-cert-reload.path. Checks the config first so a bad certificate never takes nginx down;
+# nginx keeps serving the previous certificate if the check fails (see: journalctl -u nms-cert-reload).
+
+[Unit]
+Description=Reload nginx after a NetOps Center certificate change
+
+[Service]
+Type=oneshot
+ExecStart=/usr/sbin/nginx -t -q
+ExecStart=/usr/bin/systemctl reload nginx
