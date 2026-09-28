@@ -1,7 +1,7 @@
 # NetOps Center
 
-A self-hosted network management system for switches: inventory, a built-in syslog server, configuration
-backup history with diffs, an in-browser SSH console, and network diagnostics, all in one dark "NOC" web UI.
+A self-hosted network management system for network devices: inventory, a built-in syslog server, configuration
+backups with diffs, an in-browser SSH console, email alerts and network diagnostics, all in one dark "NOC" web UI.
 
 Built with Django 5.2 (LTS), Channels/Daphne and PostgreSQL.
 
@@ -9,20 +9,21 @@ Built with Django 5.2 (LTS), Channels/Daphne and PostgreSQL.
 
 | Area | What it does |
 |---|---|
-| **Dashboard** | Switch count, backup health (succeeded / failed / never), switches whose configuration changed in the last 24h, syslog volume per hour and by severity. |
-| **Inventory** | Switches with vendor, location, status and last backup. Click a hostname to open its backup history. |
-| **SSH console** | The terminal icon opens a full xterm session to the switch in a new window, using the stored credentials. Supports older switches that only offer legacy SSH algorithms. |
+| **Dashboard** | Network device count, backup health (succeeded / failed / never), devices whose configuration changed in the last 24h, syslog volume per hour and by severity. |
+| **Inventory** | Network devices with vendor, location, status and last backup. Add, edit and delete devices; click a hostname to open its backup history. |
+| **SSH console** | The terminal icon opens a full xterm session to the device in a new window, using the stored credentials. Supports older devices that only offer legacy SSH algorithms. |
 | **Syslog server** | Listens on UDP + TCP (port configurable in Settings, default 514). Live view with pattern / regex search, severity filter and auto-refresh (5s, 10s, 30s, 1 min). Detects config-change messages from Cisco, Arista, NX-OS, Juniper and Aruba/HPE. |
-| **Backups** | Per-switch history: view a full configuration, or pick two backups and see added / removed lines. *(The automatic backup job is on the roadmap; the history, compare and schedule settings are ready.)* |
+| **Backups** | **Request backup** pulls a device's running config over SSH (Cisco IOS/NX-OS, Arista, Juniper, Aruba/HPE, MikroTik, Fortinet). Per-device history: view a full configuration, or pick two backups and see added / removed lines. Timestamps and byte counts that change on every run are ignored, so only real changes are flagged. *(Scheduled backups are on the roadmap; the schedule setting is ready.)* |
 | **Network tools** | Ping, traceroute and nslookup run from the server, with output streamed live. |
-| **Settings** | Change password, syslog port and retention, backup schedule, email notification settings. |
+| **Email alerts** | Emails when a backup fails or a device's configuration changes (from a backup comparison or a config-change syslog message, at most once per device per 15 minutes). Includes a test-email button. |
+| **Settings** | Change password, syslog port and retention, backup schedule and retention, SMTP server and notification settings. |
 
 ## Architecture
 
 ```
-Browser ──HTTP/WebSocket──> nginx ──> Daphne (Django ASGI app) ──SSH──> switches
+Browser ──HTTP/WebSocket──> nginx ──> Daphne (Django ASGI app) ──SSH──> network devices
                                            │
-Switches ──syslog UDP/TCP 514──> syslog listener (manage.py syslog_server)
+Devices ──syslog UDP/TCP 514──> syslog listener (manage.py syslog_server)
                                            │
                                      PostgreSQL
 ```
@@ -76,6 +77,7 @@ All settings are environment variables, read from `.env` in the project root. Se
 | `DJANGO_CSRF_TRUSTED_ORIGINS` | – | e.g. `https://nms.example.com` |
 | `NMS_ALLOW_SIGNUP` | `False` | Allow public account registration |
 | `DJANGO_TIME_ZONE` | `UTC` | Server time zone (the UI shows each viewer's local time) |
+| `NMS_BASE_URL` | – | e.g. `https://nms.example.com`; adds "open in NetOps Center" links to emails |
 
 ## Deployment
 
@@ -84,17 +86,16 @@ nginx. The service and site files are in [`deploy/`](deploy/).
 
 ## Security notes
 
-- **Switch credentials are stored in the database unencrypted.** Restrict access to the server and database,
-  and use dedicated switch accounts with only the privileges NetOps Center needs. Encrypting them is on the roadmap.
-- **SSH host keys are not verified yet.** The console connects to whatever answers at a switch's IP.
+- **Device credentials are stored in the database unencrypted.** Restrict access to the server and database,
+  and use dedicated device accounts with only the privileges NetOps Center needs (read access to the running
+  config for backups).
+- **SSH host keys are not verified yet.** The console and backups connect to whatever answers at a device's IP.
 - Public sign-up is **off** by default; create users with `createsuperuser` or the admin site (`/admin/`).
-- Every signed-in user can see all switches and change system settings.
+- Every signed-in user can see all network devices and change system settings.
 - Serve the site over HTTPS (see DEPLOYMENT.md) so passwords and console sessions are encrypted in transit.
 
 ## Roadmap
 
-- Automatic configuration backups over SSH on the configured schedule
-- Encrypted storage of switch credentials; SSH host key pinning
-- Email notifications (settings already available)
-- Edit / delete switches from the inventory
+- Scheduled backups of all devices on the configured schedule
+- SSH host key pinning
 - Roles: read-only operators vs administrators

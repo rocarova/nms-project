@@ -1,13 +1,13 @@
 {% extends 'system_management/base.html' %}
 
-{% block title %}Add switch{% endblock %}
+{% block title %}{% if device %}Edit {{ device.hostname }}{% else %}Add network device{% endif %}{% endblock %}
 
 {% block content %}
 <div class="page-header">
     <div>
-        <div class="page-eyebrow"><a href="{% url 'inventory' %}" class="text-decoration-none">Inventory</a> <i class="bi bi-chevron-right small"></i> New</div>
-        <h1 class="page-title">Add switch</h1>
-        <p class="page-subtitle">Register a network device so it can be monitored, backed up and managed over SSH</p>
+        <div class="page-eyebrow"><a href="{% url 'inventory' %}" class="text-decoration-none">Inventory</a> <i class="bi bi-chevron-right small"></i> {% if device %}Edit{% else %}New{% endif %}</div>
+        <h1 class="page-title">{% if device %}Edit {{ device.hostname }}{% else %}Add network device{% endif %}</h1>
+        <p class="page-subtitle">{% if device %}Update how this network device is reached, grouped and logged into{% else %}Register a network device so it can be monitored, backed up and managed over SSH{% endif %}</p>
     </div>
     <a href="{% url 'inventory' %}" class="btn-ghost"><i class="bi bi-arrow-left"></i> Back to inventory</a>
 </div>
@@ -26,7 +26,7 @@
                     <span class="section-icon"><i class="bi bi-hdd-network"></i></span>
                     <div>
                         <h2 class="section-title">Device</h2>
-                        <p class="section-subtitle">How the switch is identified and reached on the network</p>
+                        <p class="section-subtitle">How the device is identified and reached on the network</p>
                     </div>
                 </div>
                 <div class="form-grid">
@@ -40,7 +40,7 @@
                     <span class="section-icon"><i class="bi bi-diagram-3"></i></span>
                     <div>
                         <h2 class="section-title">Classification</h2>
-                        <p class="section-subtitle">Group the switch by manufacturer and site</p>
+                        <p class="section-subtitle">Group the device by manufacturer and site</p>
                     </div>
                 </div>
                 <div class="form-grid">
@@ -69,7 +69,7 @@
                 <label class="toggle-row" for="{{ form.enabled.id_for_label }}">
                     <span>
                         <span class="toggle-title">Enabled</span>
-                        <span class="toggle-desc">Include this switch in monitoring and backups</span>
+                        <span class="toggle-desc">Include this device in monitoring and backups</span>
                     </span>
                     <span class="form-check form-switch m-0">
                         <input class="form-check-input" type="checkbox" role="switch" name="{{ form.enabled.html_name }}"
@@ -80,24 +80,49 @@
 
             <div class="form-footer">
                 <a href="{% url 'inventory' %}" class="btn-ghost">Cancel</a>
-                <button type="submit" class="btn-accent"><i class="bi bi-check2"></i> Register switch</button>
+                <button type="submit" class="btn-accent"><i class="bi bi-check2"></i> {% if device %}Save changes{% else %}Add device{% endif %}</button>
             </div>
         </form>
     </div>
 
     <div class="col-xl-4">
+        {% if device %}
+        <div class="panel mb-3">
+            <div class="panel-header">
+                <div>
+                    <h2 class="panel-title">Device record</h2>
+                    <p class="panel-subtitle">Added <time data-time="{{ device.created|date:'c' }}" data-format="relative"></time> by {{ device.creator }}</p>
+                </div>
+            </div>
+            <div class="panel-body d-grid gap-2">
+                <a href="{% url 'device_backups' device.id %}" class="btn-ghost justify-content-center"><i class="bi bi-clock-history"></i> Backup history</a>
+                <a href="{% url 'ssh_console' device.id %}" class="btn-ghost justify-content-center" target="_blank" rel="noopener"><i class="bi bi-terminal"></i> SSH console</a>
+            </div>
+        </div>
+        <div class="panel" style="border-color: rgba(208, 59, 59, 0.35);">
+            <div class="panel-header">
+                <div>
+                    <h2 class="panel-title" style="color: var(--critical-bright);"><i class="bi bi-exclamation-octagon me-2"></i>Delete device</h2>
+                    <p class="panel-subtitle">Removes it from the inventory together with its backups</p>
+                </div>
+            </div>
+            <div class="panel-body">
+                <a href="{% url 'delete_device' device.id %}" class="btn-ghost is-danger w-100 justify-content-center"><i class="bi bi-trash"></i> Delete {{ device.hostname }}…</a>
+            </div>
+        </div>
+        {% else %}
         <div class="panel">
             <div class="panel-header">
                 <div>
                     <h2 class="panel-title"><i class="bi bi-lightbulb me-2" style="color: var(--warning)"></i>Before you add</h2>
-                    <p class="panel-subtitle">Get the switch ready for NetOps Center</p>
+                    <p class="panel-subtitle">Get the device ready for NetOps Center</p>
                 </div>
             </div>
             <div class="panel-body">
                 <ol class="checklist">
                     <li>
                         <span class="step">1</span>
-                        <div><strong>Enable SSH</strong> on the switch and create a local user for NetOps Center.</div>
+                        <div><strong>Enable SSH</strong> on the device and create a local user for NetOps Center.</div>
                     </li>
                     <li>
                         <span class="step">2</span>
@@ -108,11 +133,12 @@ logging trap informational</pre>
                     </li>
                     <li>
                         <span class="step">3</span>
-                        <div><strong>Use the management IP</strong>, the one the switch sends syslog from, so its logs are matched to it.</div>
+                        <div><strong>Use the management IP</strong>, the one the device sends syslog from, so its logs are matched to it.</div>
                     </li>
                 </ol>
             </div>
         </div>
+        {% endif %}
     </div>
 </div>
 {% endblock %}

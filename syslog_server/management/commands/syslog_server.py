@@ -11,10 +11,12 @@ from inventory.models import Device
 from syslog_server import parser
 from syslog_server.models import SyslogMessage
 from system_management.models import SystemSettings
+from system_management.notifications import notify
 
 FLUSH_INTERVAL = 1            # seconds between database writes
 SETTINGS_REFRESH_INTERVAL = 5 # seconds between checking Settings (port, retention) and reporting status
 DEVICE_REFRESH_INTERVAL = 60  # seconds between reloading the IP -> device map
+CONFIG_NOTIFY_WINDOW = 15 * 60  # one config-change email per device per 15 minutes (edits often log many lines)
 PURGE_INTERVAL = 3600         # seconds between deleting expired messages
 MAX_PENDING = 50_000          # drop messages beyond this if the database can't keep up
 MAX_TCP_BUFFER = 64 * 1024
@@ -55,6 +57,7 @@ class Command(BaseCommand):
         self.dropped = 0
         self.received = 0
         self.devices_by_ip = {}
+        self.config_notified_at = {}
         self.devices_loaded_at = 0
         self.settings_loaded_at = 0
         self.wanted_port = port
@@ -200,11 +203,33 @@ class Command(BaseCommand):
                     is_config_change=parser.is_config_change(message),
                 ))
             SyslogMessage.objects.bulk_create(rows)
+            self.notify_config_changes(rows)
 
         if self.retention_days and now - self.purged_at > PURGE_INTERVAL:
             cutoff = timezone.now() - timedelta(days=self.retention_days)
             SyslogMessage.objects.filter(received_at__lt=cutoff).delete()
             self.purged_at = now
+
+    def notify_config_changes(self, rows):
+        """Emails about config-change messages from known devices, at most once per device per window."""
+        now = time.monotonic()
+        for row in rows:
+            if not (row.is_config_change and row.device_id):
+                continue
+            if now - self.config_notified_at.get(row.device_id, -CONFIG_NOTIFY_WINDOW) < CONFIG_NOTIFY_WINDOW:
+                continue
+            self.config_notified_at[row.device_id] = now
+            device = Device.objects.select_related('location').filter(pk=row.device_id).first()
+            if device is None:
+                continue
+            notify('config_changed', f'Configuration changed on {device.hostname}',
+                   f'{device.hostname} ({device.ip_address}) reported a configuration change:\n\n'
+                   f'    {row.message}\n\n'
+                   f'Received: {row.received_at:%Y-%m-%d %H:%M:%S %Z}\n'
+                   f'Location: {device.location}\n'
+                   f'Further changes on this device in the next {CONFIG_NOTIFY_WINDOW // 60} minutes '
+                   f"won't be emailed separately.\n",
+                   path=f'/syslog/?q={device.ip_address}')
 
     def refresh_settings(self):
         """Picks up Settings page changes and reports this listener's status back to it."""

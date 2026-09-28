@@ -41,10 +41,13 @@ urlpatterns = [
     path('add_device/', inventory_views.add_device, name='add_device'),
     path('add_vendor/', inventory_views.add_vendor, name='add_vendor'),
     path('add_location/', inventory_views.add_location, name='add_location'),
+    path('inventory/<int:device_id>/edit/', inventory_views.edit_device, name='edit_device'),
+    path('inventory/<int:device_id>/delete/', inventory_views.delete_device, name='delete_device'),
     path('inventory/<int:device_id>/ssh/', inventory_views.ssh_console, name='ssh_console'),
 
     # Backups
     path('inventory/<int:device_id>/backups/', backup_views.device_backups, name='device_backups'),
+    path('inventory/<int:device_id>/backups/run/', backup_views.request_backup, name='request_backup'),
     path('inventory/<int:device_id>/backups/compare/', backup_views.backup_compare, name='backup_compare'),
     path('inventory/<int:device_id>/backups/<int:backup_id>/', backup_views.backup_detail, name='backup_detail'),
     path('inventory/<int:device_id>/backups/<int:backup_id>/download/', backup_views.backup_download, name='backup_download'),

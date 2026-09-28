@@ -107,7 +107,7 @@
                         <span class="section-icon"><i class="bi bi-broadcast"></i></span>
                         <div>
                             <h2 class="section-title">Syslog listener</h2>
-                            <p class="section-subtitle">Where switches send their logs</p>
+                            <p class="section-subtitle">Where network devices send their logs</p>
                         </div>
                     </div>
 
@@ -140,7 +140,7 @@
                     <div class="notice">
                         <i class="bi bi-info-circle-fill"></i>
                         <div>
-                            <strong>If you change the port</strong>, update your switches and allow it through the firewall. On Cisco:
+                            <strong>If you change the port</strong>, update your network devices and allow it through the firewall. On Cisco:
                             <pre class="snippet">logging host {{ server_ip }} transport udp port {{ system.syslog_port }}</pre>
                         </div>
                     </div>
@@ -161,12 +161,12 @@
                         <span class="section-icon"><i class="bi bi-clock-history"></i></span>
                         <div>
                             <h2 class="section-title">Backup schedule</h2>
-                            <p class="section-subtitle">How often switch configurations are saved to the repository</p>
+                            <p class="section-subtitle">How often network device configurations are saved to the repository</p>
                         </div>
                     </div>
                     <div class="notice">
                         <i class="bi bi-info-circle-fill"></i>
-                        <div><strong>Automatic backups aren't running yet.</strong> The schedule is saved now and will be used once the backup job is enabled.</div>
+                        <div><strong>Scheduled backups aren't running yet.</strong> The schedule is saved and will be used once the scheduler is enabled. Meanwhile, back up any device with <strong>Request backup</strong> on its backup page.</div>
                     </div>
                     {% with form=forms.backups %}
                     <div class="form-grid">
@@ -204,7 +204,7 @@
                     </div>
                     <div class="notice">
                         <i class="bi bi-info-circle-fill"></i>
-                        <div><strong>Email sending isn't active yet.</strong> You can save your mail server details now; notifications will start once sending is built.</div>
+                        <div>Emails are sent when a <strong>backup fails</strong> or a <strong>device's configuration changes</strong> (from a backup comparison, or a config-change syslog message, at most once every 15 minutes per device). Use <strong>Save &amp; send test email</strong> to check your mail server settings.</div>
                     </div>
                     {% include 'system_management/_settings_field.html' with field=form.email_enabled hint='Send notifications from NetOps Center by email' %}
                 </div>
@@ -245,12 +245,15 @@
                         <div class="grid-span-2">{% include 'system_management/_settings_field.html' with field=form.email_recipients %}</div>
                     </div>
                     <div class="small text-muted-nms text-uppercase fw-semibold mb-2" style="letter-spacing: 0.08em; font-size: 0.75rem;">Notify me when</div>
-                    {% include 'system_management/_settings_field.html' with field=form.notify_backup_failed hint='Includes the error returned by the switch' %}
+                    {% include 'system_management/_settings_field.html' with field=form.notify_backup_failed hint='Includes the error returned by the device' %}
                     {% include 'system_management/_settings_field.html' with field=form.notify_config_changed hint='Detected from syslog or a backup comparison' %}
                 </div>
                 {% endwith %}
                 <div class="form-footer">
-                    <button type="button" class="btn-ghost" disabled title="Available once email sending is built"><i class="bi bi-send"></i> Send test email</button>
+                    <button type="submit" name="action" value="test" class="btn-ghost" title="Save these settings and send a test email to the recipients"
+                            onclick="setTimeout(() => { this.disabled = true; this.innerHTML = '<span class=&quot;spinner-border spinner-border-sm&quot;></span> Sending…'; })">
+                        <i class="bi bi-send"></i> Save &amp; send test email
+                    </button>
                     <button type="submit" class="btn-accent"><i class="bi bi-check2"></i> Save email settings</button>
                 </div>
             </form>
@@ -279,10 +282,10 @@
         const value = frequency.value;
         document.querySelectorAll('[data-show-for]').forEach(el => el.hidden = !el.dataset.showFor.split(' ').includes(value));
         const label = frequency.options[frequency.selectedIndex].text.toLowerCase();
-        summary.textContent = value === 'disabled' ? 'Switches will not be backed up automatically.'
-            : value === 'daily' ? `Switches will be backed up every day at ${time.value || '—'}.`
-            : value === 'weekly' ? `Switches will be backed up every ${weekday.options[weekday.selectedIndex].text} at ${time.value || '—'}.`
-            : `Switches will be backed up ${label}.`;
+        summary.textContent = value === 'disabled' ? 'Network devices will not be backed up automatically.'
+            : value === 'daily' ? `Network devices will be backed up every day at ${time.value || '—'}.`
+            : value === 'weekly' ? `Network devices will be backed up every ${weekday.options[weekday.selectedIndex].text} at ${time.value || '—'}.`
+            : `Network devices will be backed up ${label}.`;
     }
     [frequency, time, weekday].forEach(el => el.addEventListener('input', updateSchedule));
     updateSchedule();

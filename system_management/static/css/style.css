@@ -517,6 +517,15 @@ body {
 
 .btn-icon:hover { color: var(--text); background: var(--surface-3); }
 .btn-icon.btn-ssh:hover { color: var(--accent); background: var(--accent-soft); }
+.btn-icon.btn-danger-icon:hover { color: var(--critical-bright); background: rgba(208, 59, 59, 0.12); }
+
+.btn-danger {
+    display: inline-flex; align-items: center; gap: 8px;
+    background: var(--critical); color: #fff; border: none; padding: 9px 16px; border-radius: 10px;
+    font-weight: 600; font-size: 0.9rem; text-decoration: none; cursor: pointer; transition: background-color 0.15s;
+}
+.btn-danger:hover { background: #e04848; color: #fff; }
+.btn-ghost.is-danger:hover { color: var(--critical-bright); border-color: rgba(208, 59, 59, 0.5); background: rgba(208, 59, 59, 0.1); }
 .btn-icon[aria-disabled="true"] { opacity: 0.4; pointer-events: none; }
 
 .input-nms,
@@ -618,7 +627,7 @@ select.input-nms, .custom-device-form select { cursor: pointer; }
 
 .btn-add-inline:hover { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
 
-/* Sectioned form (add switch) */
+/* Sectioned form (add/edit device) */
 .form-section { padding: 24px 28px 6px; border-bottom: 1px solid var(--border); }
 .form-section:last-of-type { border-bottom: none; }
 

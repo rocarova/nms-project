@@ -2,7 +2,7 @@ import socket
 
 
 def server_lan_ip(request):
-    """The address switches should send syslog to: the one the browser reached us on, unless that's localhost."""
+    """The address network devices should send syslog to: the one the browser reached us on, unless that's localhost."""
     host = request.get_host().rsplit(':', 1)[0]
     if host not in ('127.0.0.1', 'localhost', '[::1]'):
         return host

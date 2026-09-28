@@ -126,17 +126,23 @@ DJANGO_CSRF_TRUSTED_ORIGINS=https://nms.example.com
 
 and `sudo systemctl restart nms-web`.
 
-## 11. Point your switches at the server
+## 11. Point your network devices at the server
 
-Cisco IOS example (the **Add switch** page and **Settings → Syslog** show the exact command):
+Cisco IOS example (the **Add network device** page and **Settings → Syslog** show the exact command):
 
 ```
 logging host <server-ip>
 logging trap informational
 ```
 
-Add each switch to the inventory with the IP address it sends syslog **from** (usually its management IP),
-so its messages are linked to it.
+Add each device to the inventory with the IP address it sends syslog **from** (usually its management IP),
+so its messages are linked to it. Backups and the SSH console connect to that same address on port 22.
+
+## 12. Email alerts (optional)
+
+In **Settings → Email**, enter your SMTP server and recipients and click **Save & send test email**.
+Set `NMS_BASE_URL=https://nms.example.com` in `.env` so emails link back to the site. The server needs
+outbound access to the SMTP port (usually 587 or 465).
 
 ## Updating
 
@@ -151,7 +157,7 @@ sudo systemctl restart nms-web nms-syslog
 
 ## Database backups
 
-The database holds the inventory (including switch credentials), config backups and syslog. Back it up, e.g.
+The database holds the inventory (including device credentials), config backups and syslog. Back it up, e.g.
 nightly with cron:
 
 ```bash
@@ -160,7 +166,7 @@ sudo mkdir -p /var/backups/nms && sudo chown postgres /var/backups/nms
 0 3 * * * sudo -u postgres pg_dump -Fc nms > /var/backups/nms/nms-$(date +\%F).dump && find /var/backups/nms -mtime +14 -delete
 ```
 
-Store the dumps securely; they contain switch credentials.
+Store the dumps securely; they contain device credentials.
 
 ## Troubleshooting
 

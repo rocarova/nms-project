@@ -1,10 +1,14 @@
+from asgiref.sync import sync_to_async
+from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.db.models.functions import Length
 from django.http import Http404, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
+from django.views.decorators.http import require_POST
 
 from inventory.models import Device
+from .collector import backup_device
 from .diff import diff_rows, numbered_lines
 from .models import ConfigBackup
 
@@ -97,3 +101,26 @@ def backup_compare(request, device_id):
         'history': successful_backups(device)[:HISTORY_LIMIT],
         'changes_url': f"{reverse('backup_compare', args=[device.id])}?a={old.id}&b={new.id}",
     })
+
+
+def run_backup(device_id):
+    device = get_device(device_id)
+    had_backup = successful_backups(device).exists()
+    return device, had_backup, backup_device(device)
+
+
+@login_required
+@require_POST
+async def request_backup(request, device_id):
+    # A backup can take up to a minute; run it on its own thread instead of Django's shared sync thread,
+    # so other pages stay responsive meanwhile
+    device, had_backup, backup = await sync_to_async(run_backup, thread_sensitive=False)(device_id)
+    if backup.status == ConfigBackup.FAILED:
+        messages.error(request, f'Backup of {device.hostname} failed: {backup.error}')
+    elif backup.changed:
+        messages.success(request, 'Backup saved. The configuration changed since the previous backup.')
+    elif had_backup:
+        messages.success(request, 'Backup saved. No changes since the previous backup.')
+    else:
+        messages.success(request, f'First backup of {device.hostname} saved.')
+    return redirect('device_backups', device_id=device.id)

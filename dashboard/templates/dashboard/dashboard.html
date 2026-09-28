@@ -59,11 +59,11 @@
     <div>
         <div class="page-eyebrow">Monitor</div>
         <h1 class="page-title">Network overview</h1>
-        <p class="page-subtitle">Switch inventory, backup health and configuration changes · last 24 hours</p>
+        <p class="page-subtitle">Network device inventory, backup health and configuration changes · last 24 hours</p>
     </div>
     <div class="d-flex gap-2">
         <a href="{% url 'syslog' %}" class="btn-ghost"><i class="bi bi-journal-code"></i> Live syslog</a>
-        <a href="{% url 'add_device' %}" class="btn-accent"><i class="bi bi-plus-lg"></i> Add switch</a>
+        <a href="{% url 'add_device' %}" class="btn-accent"><i class="bi bi-plus-lg"></i> Add Device</a>
     </div>
 </div>
 
@@ -72,7 +72,7 @@
     <div class="col-sm-6 col-xl-3">
         <div class="panel kpi kpi-accent">
             <div class="kpi-top">
-                <span class="kpi-label">Switches managed</span>
+                <span class="kpi-label">Network devices</span>
                 <span class="kpi-icon"><i class="bi bi-hdd-rack"></i></span>
             </div>
             <div class="kpi-value">{{ total_devices }}</div>
@@ -106,7 +106,7 @@
                 <span class="kpi-icon"><i class="bi bi-arrow-left-right"></i></span>
             </div>
             <div class="kpi-value">{{ changed_count }}</div>
-            <div class="kpi-foot">Switches changed in the last 24h</div>
+            <div class="kpi-foot">Network devices changed in the last 24h</div>
         </div>
     </div>
 </div>
@@ -130,7 +130,7 @@
                     <div class="chart-empty">
                         <div>
                             <i class="bi bi-broadcast d-block fs-3 mb-2"></i>
-                            No syslog received yet.<br>Point your switches at this server on UDP/TCP 514.
+                            No syslog received yet.<br>Point your network devices at this server on UDP/TCP 514.
                         </div>
                     </div>
                     {% endif %}
@@ -181,7 +181,7 @@
             {% if recent_changes %}
             <div class="table-responsive">
                 <table class="data-table">
-                    <thead><tr><th>When</th><th>Switch</th><th>Detected by</th><th>Detail</th></tr></thead>
+                    <thead><tr><th>When</th><th>Network device</th><th>Detected by</th><th>Detail</th></tr></thead>
                     <tbody>
                         {% for change in recent_changes %}
                         <tr>
@@ -219,7 +219,7 @@
             <div class="panel-header">
                 <div>
                     <h2 class="panel-title">Backup health</h2>
-                    <p class="panel-subtitle">Based on each switch's latest backup</p>
+                    <p class="panel-subtitle">Based on each network device's latest backup</p>
                 </div>
             </div>
             {% if total_devices %}
@@ -264,15 +264,15 @@
             {% else %}
             <div class="empty-state">
                 <i class="bi bi-shield-check"></i>
-                <div class="title">All switches backed up</div>
-                Every switch's latest backup succeeded.
+                <div class="title">All network devices backed up</div>
+                Every network device's latest backup succeeded.
             </div>
             {% endif %}
             {% else %}
             <div class="empty-state">
                 <i class="bi bi-hdd-rack"></i>
-                <div class="title">No switches yet</div>
-                <a href="{% url 'add_device' %}">Add your first switch</a> to start tracking backups.
+                <div class="title">No network devices yet</div>
+                <a href="{% url 'add_device' %}">Add your first network device</a> to start tracking backups.
             </div>
             {% endif %}
         </div>

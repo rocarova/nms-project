@@ -256,7 +256,7 @@
             const filtered = queryParams().toString() !== '';
             td.innerHTML = filtered
                 ? '<div class="empty-state"><i class="bi bi-search"></i><div class="title">No matching messages</div>Try a different pattern or severity.</div>'
-                : '<div class="empty-state"><i class="bi bi-broadcast"></i><div class="title">Waiting for syslog…</div>Point your switches at this server on UDP/TCP 514.<br>To test: <code>python manage.py syslog_test</code></div>';
+                : '<div class="empty-state"><i class="bi bi-broadcast"></i><div class="title">Waiting for syslog…</div>Point your network devices at this server on UDP/TCP 514.<br>To test: <code>python manage.py syslog_test</code></div>';
             tr.append(td);
             rows.push(tr);
         }

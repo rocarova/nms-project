@@ -7,10 +7,12 @@
     <div>
         <div class="page-eyebrow">Manage</div>
         <h1 class="page-title">Inventory</h1>
-        <p class="page-subtitle">{{ devices|length }} switch{{ devices|length|pluralize:"es" }} under management</p>
+        <p class="page-subtitle">{{ devices|length }} network device{{ devices|length|pluralize }} under management</p>
     </div>
-    <a href="{% url 'add_device' %}" class="btn-accent"><i class="bi bi-plus-lg"></i> Add switch</a>
+    <a href="{% url 'add_device' %}" class="btn-accent"><i class="bi bi-plus-lg"></i> Add Device</a>
 </div>
+
+{% include 'system_management/_messages.html' %}
 
 <div class="panel">
     <div class="table-responsive">
@@ -58,8 +60,8 @@
                            data-window="ssh-{{ device.id }}" title="Open SSH console to {{ device.hostname }}" aria-label="Open SSH console to {{ device.hostname }}">
                             <i class="bi bi-terminal"></i>
                         </a>
-                        <a href="#" class="btn-icon" title="Edit (coming soon)" aria-disabled="true"><i class="bi bi-pencil"></i></a>
-                        <a href="#" class="btn-icon" title="Delete (coming soon)" aria-disabled="true"><i class="bi bi-trash"></i></a>
+                        <a href="{% url 'edit_device' device.id %}" class="btn-icon" title="Edit {{ device.hostname }}" aria-label="Edit {{ device.hostname }}"><i class="bi bi-pencil"></i></a>
+                        <a href="{% url 'delete_device' device.id %}" class="btn-icon btn-danger-icon" title="Delete {{ device.hostname }}" aria-label="Delete {{ device.hostname }}"><i class="bi bi-trash"></i></a>
                     </td>
                 </tr>
                 {% empty %}
@@ -67,8 +69,8 @@
                     <td colspan="7">
                         <div class="empty-state">
                             <i class="bi bi-hdd-rack"></i>
-                            <div class="title">No switches in the inventory</div>
-                            <a href="{% url 'add_device' %}">Add your first switch</a> to get started.
+                            <div class="title">No network devices in the inventory</div>
+                            <a href="{% url 'add_device' %}">Add your first network device</a> to get started.
                         </div>
                     </td>
                 </tr>
@@ -81,7 +83,7 @@
 
 {% block scripts %}
 <script>
-    // Open each switch's console in its own window (clicking again focuses the existing one)
+    // Open each device's console in its own window (clicking again focuses the existing one)
     document.querySelectorAll('.btn-ssh').forEach(link => link.addEventListener('click', event => {
         const win = window.open(link.href, link.dataset.window, 'width=1100,height=700,menubar=no,toolbar=no,location=no');
         if (win) { event.preventDefault(); win.focus(); }

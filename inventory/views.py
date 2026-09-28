@@ -1,3 +1,4 @@
+from django.contrib import messages
 from django.shortcuts import get_object_or_404, render, redirect
 from .forms import DeviceForm, VendorForm, LocationForm
 from .models import Device
@@ -21,11 +22,43 @@ def add_device(request):
             new_device = form.save(commit=False)
             new_device.creator = request.user
             new_device.save()
+            messages.success(request, f'{new_device.hostname} was added to the inventory.')
             return redirect('inventory')
     else:
         form = DeviceForm()
 
     return render(request, 'inventory/add_device.html', {'form': form, 'server_ip': server_lan_ip(request)})
+
+@login_required
+def edit_device(request, device_id):
+    device = get_object_or_404(Device, pk=device_id)
+    if request.method == 'POST':
+        form = DeviceForm(request.POST, instance=device)
+        if form.is_valid():
+            form.save()
+            messages.success(request, f'{device.hostname} was updated.')
+            return redirect('inventory')
+    else:
+        form = DeviceForm(instance=device)
+
+    return render(request, 'inventory/add_device.html', {
+        'form': form, 'device': device, 'server_ip': server_lan_ip(request),
+    })
+
+@login_required
+def delete_device(request, device_id):
+    device = get_object_or_404(Device.objects.select_related('vendor', 'location'), pk=device_id)
+    if request.method == 'POST':
+        hostname = device.hostname
+        device.delete()  # Its backups go with it; its syslog messages stay, just no longer linked
+        messages.success(request, f'{hostname} was deleted.')
+        return redirect('inventory')
+
+    return render(request, 'inventory/delete_device.html', {
+        'device': device,
+        'backup_count': device.backups.count(),
+        'syslog_count': device.syslog_messages.count(),
+    })
 
 @login_required
 def ssh_console(request, device_id):

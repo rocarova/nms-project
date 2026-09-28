@@ -14,6 +14,7 @@ from django.utils.http import url_has_allowed_host_and_scheme
 from .forms import BackupSettingsForm, EmailSettingsForm, SyslogSettingsForm
 from .models import SystemSettings
 from .network import server_lan_ip
+from .notifications import describe_error, recipients, send_test
 
 # The listener reports in every few seconds; older than this means it isn't running
 LISTENER_STALE_AFTER = timedelta(seconds=30)
@@ -93,7 +94,8 @@ def settings_view(request):
         elif tab == 'backups':
             form = BackupSettingsForm(request.POST, instance=system)
         elif tab == 'email':
-            form = EmailSettingsForm(request.POST, instance=system)
+            sending_test = request.POST.get('action') == 'test'
+            form = EmailSettingsForm(request.POST, instance=system, require_server=sending_test)
         else:
             return redirect('settings')
 
@@ -102,6 +104,12 @@ def settings_view(request):
             if tab == 'account':
                 update_session_auth_hash(request, form.user)  # Keep the user signed in after changing password
                 messages.success(request, 'Your password has been changed.')
+            elif tab == 'email' and sending_test:
+                try:
+                    send_test(form.instance)
+                    messages.success(request, f"Settings saved. A test email was sent to {', '.join(recipients(form.instance))}.")
+                except Exception as exc:
+                    messages.error(request, f'Settings saved, but the test email failed: {describe_error(exc, form.instance)}')
             else:
                 messages.success(request, f'{tab.capitalize()} settings saved.')
             return redirect(f"{reverse('settings')}?tab={tab}")

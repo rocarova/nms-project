@@ -31,7 +31,7 @@ class BackupSettingsForm(SettingsSectionForm):
             'backup_frequency': 'Backup frequency',
             'backup_time': 'Time of day',
             'backup_weekday': 'Day of week',
-            'backup_retention': 'Backups to keep per switch',
+            'backup_retention': 'Backups to keep per device',
         }
         widgets = {'backup_time': forms.TimeInput(attrs={'type': 'time'}, format='%H:%M')}
 
@@ -50,8 +50,8 @@ class EmailSettingsForm(SettingsSectionForm):
             'smtp_password': 'Password',
             'email_from': 'From address',
             'email_recipients': 'Recipients',
-            'notify_backup_failed': 'A switch backup fails',
-            'notify_config_changed': 'A switch configuration changes',
+            'notify_backup_failed': 'A network device backup fails',
+            'notify_config_changed': "A network device's configuration changes",
         }
         widgets = {
             'smtp_host': forms.TextInput(attrs={'placeholder': 'e.g. smtp.office365.com'}),
@@ -60,6 +60,11 @@ class EmailSettingsForm(SettingsSectionForm):
             'email_from': forms.EmailInput(attrs={'placeholder': 'nms@example.com'}),
             'email_recipients': forms.Textarea(attrs={'rows': 3, 'placeholder': 'noc@example.com\noncall@example.com'}),
         }
+
+    def __init__(self, *args, require_server=False, **kwargs):
+        # Sending a test email needs the server details even while notifications are switched off
+        self.require_server = require_server
+        super().__init__(*args, **kwargs)
 
     def clean_smtp_password(self):
         # PasswordInput never re-displays the saved value, so a blank submission means "keep it"
@@ -76,8 +81,8 @@ class EmailSettingsForm(SettingsSectionForm):
 
     def clean(self):
         cleaned = super().clean()
-        if cleaned.get('email_enabled'):
+        if cleaned.get('email_enabled') or self.require_server:
             for field in ('smtp_host', 'email_from', 'email_recipients'):
                 if not cleaned.get(field):
-                    self.add_error(field, 'Required when email notifications are enabled.')
+                    self.add_error(field, 'Required to send email.')
         return cleaned

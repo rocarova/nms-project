@@ -1,4 +1,4 @@
-"""Line-based comparison and display helpers for switch configurations."""
+"""Line-based comparison and display helpers for network device configurations."""
 import difflib
 
 

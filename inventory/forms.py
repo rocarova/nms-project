@@ -20,6 +20,13 @@ class DeviceForm(ModelForm):
         super().__init__(*args, **kwargs)
         self.fields['vendor'].empty_label = 'Select a vendor'
         self.fields['location'].empty_label = 'Select a location'
+        if self.instance.pk:
+            # Editing: the saved password is never sent back to the browser, so blank means "keep it"
+            self.fields['password'].required = False
+            self.fields['password'].widget.attrs['placeholder'] = 'Leave blank to keep the current password'
+
+    def clean_password(self):
+        return self.cleaned_data['password'] or self.instance.password
 
 class VendorForm(ModelForm):
     class Meta:

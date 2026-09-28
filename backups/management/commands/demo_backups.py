@@ -87,10 +87,10 @@ CHANGES = [
 
 
 class Command(BaseCommand):
-    help = 'Creates sample configuration backups for switches, to try the backup history and compare pages.'
+    help = 'Creates sample configuration backups for network devices, to try the backup history and compare pages.'
 
     def add_arguments(self, parser):
-        parser.add_argument('hostnames', nargs='*', help='Switches to create demo backups for (default: all)')
+        parser.add_argument('hostnames', nargs='*', help='Network devices to create demo backups for (default: all)')
         parser.add_argument('--clear', action='store_true', help='Remove all demo backups instead')
 
     def handle(self, *args, **options):
@@ -104,7 +104,7 @@ class Command(BaseCommand):
         if options['hostnames']:
             devices = devices.filter(hostname__in=options['hostnames'])
         if not devices.exists():
-            raise CommandError('No matching switches in the inventory.')
+            raise CommandError('No matching network devices in the inventory.')
 
         now = timezone.now()
         for device in devices:

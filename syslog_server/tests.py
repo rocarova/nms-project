@@ -82,6 +82,7 @@ class SaveTests(TestCase):
         command.retention_days = 30
         command.port, command.error, command.failed_port = 514, '', None
         command.port_pinned = command.retention_pinned = False
+        command.config_notified_at = {}
         command.save([
             (timezone.now(), '10.0.0.1', b'<189>1: %SYS-5-CONFIG_I: Configured from console'),
             (timezone.now(), '10.9.9.9', b'<187>2: %LINK-3-UPDOWN: down'),

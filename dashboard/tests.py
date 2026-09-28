@@ -56,6 +56,6 @@ class DashboardTests(TestCase):
     def test_empty_dashboard_renders(self):
         Device.objects.all().delete()
         response = self.client.get(reverse('dashboard'))
-        self.assertContains(response, 'No switches yet')
+        self.assertContains(response, 'No network devices yet')
         self.assertContains(response, 'No syslog received yet')
         self.assertEqual(len(response.context['syslog_hourly']), 24)

@@ -15,7 +15,7 @@ class SystemSettings(models.Model):
         default=30, validators=[MinValueValidator(1), MaxValueValidator(3650)],
         help_text='Messages older than this are deleted automatically.')
 
-    # Backups (the backup job itself is not built yet; these are its schedule)
+    # Backups (on-demand backups use backup_retention; the schedule is for the upcoming scheduler)
     FREQUENCY_DISABLED = 'disabled'
     FREQUENCY_CHOICES = [
         ('disabled', 'Disabled'),
@@ -32,9 +32,9 @@ class SystemSettings(models.Model):
     backup_weekday = models.PositiveSmallIntegerField(choices=WEEKDAY_CHOICES, default=6)
     backup_retention = models.PositiveIntegerField(
         default=30, validators=[MinValueValidator(1), MaxValueValidator(1000)],
-        help_text='How many backups to keep per switch.')
+        help_text='How many backups to keep per network device.')
 
-    # Email notifications (settings only; sending is not built yet)
+    # Email notifications (sent by system_management.notifications)
     SECURITY_CHOICES = [('starttls', 'STARTTLS'), ('ssl', 'SSL/TLS'), ('none', 'None')]
     email_enabled = models.BooleanField(default=False)
     smtp_host = models.CharField(max_length=255, blank=True)

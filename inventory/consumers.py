@@ -1,4 +1,4 @@
-"""WebSocket <-> SSH bridge for the in-browser switch console.
+"""WebSocket <-> SSH bridge for the in-browser device console.
 
 Protocol:
   client -> server (text JSON): {"type": "input", "data": "..."} | {"type": "resize", "cols": N, "rows": N}
@@ -14,20 +14,12 @@ import asyncssh
 from channels.db import database_sync_to_async
 from channels.generic.websocket import AsyncWebsocketConsumer
 
+from . import ssh
 from .models import Device
 
 logger = logging.getLogger(__name__)
 
-CONNECT_TIMEOUT = 15
 DEFAULT_SIZE = (120, 32)
-
-# Older switches (e.g. Cisco IOS 12.x/15.x) only offer legacy algorithms; '+' appends them after the secure defaults
-LEGACY_ALGORITHMS = {
-    'kex_algs': '+diffie-hellman-group14-sha1,diffie-hellman-group1-sha1,diffie-hellman-group-exchange-sha1',
-    'server_host_key_algs': '+ssh-rsa',
-    'encryption_algs': '+aes128-cbc,aes192-cbc,aes256-cbc,3des-cbc',
-    'mac_algs': '+hmac-sha1',
-}
 
 
 def clamp_size(cols, rows):
@@ -71,27 +63,15 @@ class SSHConsumer(AsyncWebsocketConsumer):
         logger.info('SSH console: %s opened a session to %s (%s)', user.username, device.hostname, device.ip_address)
 
         try:
-            self.conn = await asyncio.wait_for(asyncssh.connect(
-                device.ip_address,
-                username=device.username,
-                password=device.password,
-                known_hosts=None,  # Switch host keys aren't tracked yet; see README note on host key checking
-                client_keys=None,  # Only use the stored password, never the server's own SSH keys
-                agent_path=None,
-                preferred_auth='keyboard-interactive,password',
-                **LEGACY_ALGORITHMS,
-            ), timeout=CONNECT_TIMEOUT)
+            self.conn = await ssh.connect(device)
             self.process = await self.conn.create_process(
                 term_type='xterm-256color', term_size=(cols, rows), encoding=None,
             )
-        except asyncio.TimeoutError:
-            await self.fail(f'Timed out after {CONNECT_TIMEOUT}s connecting to {device.ip_address}:22.')
-            return
-        except asyncssh.PermissionDenied:
-            await self.fail('Authentication failed: check the username and password saved for this device.')
+        except ssh.ConnectError as exc:
+            await self.fail(str(exc))
             return
         except (OSError, asyncssh.Error) as exc:
-            await self.fail(f'Could not connect: {exc}')
+            await self.fail(f'Could not open a shell: {exc}')
             return
 
         await self.send_json('status', 'connected')
@@ -101,7 +81,7 @@ class SSHConsumer(AsyncWebsocketConsumer):
         try:
             while data := await self.process.stdout.read(65536):
                 await self.send(bytes_data=data)
-            await self.send_json('closed', 'Session closed by the switch.')
+            await self.send_json('closed', 'Session closed by the device.')
         except (asyncssh.Error, ConnectionError) as exc:
             await self.send_json('closed', f'Connection lost: {exc}')
         except asyncio.CancelledError:
