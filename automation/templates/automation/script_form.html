@@ -1,0 +1,66 @@
+{% extends 'system_management/base.html' %}
+
+{% block title %}{% if script %}Edit {{ script.name }}{% else %}New script{% endif %}{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="page-eyebrow"><a href="{% url 'automation' %}" class="text-decoration-none">Automation</a> <i class="bi bi-chevron-right small"></i> Scripts</div>
+        <h1 class="page-title">{% if script %}Edit {{ script.name }}{% else %}New script{% endif %}</h1>
+        <p class="page-subtitle">A reusable set of commands to push to many network devices</p>
+    </div>
+    <a href="{% url 'automation' %}#scripts" class="btn-ghost"><i class="bi bi-arrow-left"></i> Back to scripts</a>
+</div>
+
+<form method="POST" class="panel custom-device-form" style="max-width: 900px;" novalidate>
+    {% csrf_token %}
+    <div class="form-section">
+        {% for error in form.non_field_errors %}<div class="alert-nms"><i class="bi bi-exclamation-triangle-fill"></i> <span>{{ error }}</span></div>{% endfor %}
+        <div class="form-grid">
+            {% include 'system_management/_settings_field.html' with field=form.name icon='file-earmark-code' %}
+            {% include 'system_management/_settings_field.html' with field=form.description icon='card-text' %}
+        </div>
+
+        <label class="mb-2">Runs in</label>
+        <div class="choice-cards">
+            <label class="choice-card">
+                <input type="radio" name="mode" value="config" {% if form.mode.value == 'config' %}checked{% endif %}>
+                <span class="card-body-inner"><i class="bi bi-gear-wide-connected"></i><span>
+                    <span class="title">Configuration</span><span class="desc">Sent inside config mode, with backups before and after</span></span></span>
+            </label>
+            <label class="choice-card">
+                <input type="radio" name="mode" value="exec" {% if form.mode.value == 'exec' %}checked{% endif %}>
+                <span class="card-body-inner"><i class="bi bi-terminal"></i><span>
+                    <span class="title">Show / exec</span><span class="desc">Run as typed; output is collected</span></span></span>
+            </label>
+        </div>
+
+        <div class="field-container{% if form.commands.errors %} has-error{% endif %}">
+            <label for="id_commands">Commands</label>
+            {{ form.commands }}
+            <div class="var-chips">
+                <span class="small text-muted-nms me-1">Insert:</span>
+                {% for name in variables %}
+                <span class="var-chip" data-insert="{% templatetag openvariable %} {{ name }} {% templatetag closevariable %}">{% templatetag openvariable %} {{ name }} {% templatetag closevariable %}</span>
+                {% endfor %}
+            </div>
+            <small class="helptext">One command per line, without "configure terminal" / "end" (added for each vendor automatically). Lines starting with # are comments.</small>
+            {% for error in form.commands.errors %}<div class="field-error">{{ error }}</div>{% endfor %}
+        </div>
+    </div>
+    <div class="form-footer">
+        <a href="{% url 'automation' %}#scripts" class="btn-ghost">Cancel</a>
+        <button type="submit" class="btn-accent"><i class="bi bi-check2"></i> Save script</button>
+    </div>
+</form>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    const commands = document.getElementById('id_commands');
+    document.querySelectorAll('.var-chip').forEach(chip => chip.addEventListener('click', () => {
+        commands.setRangeText(chip.dataset.insert, commands.selectionStart, commands.selectionEnd, 'end');
+        commands.focus();
+    }));
+</script>
+{% endblock %}

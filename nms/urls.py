@@ -22,6 +22,7 @@ from system_management import views as sm_views
 from dashboard import views as dashboard_views
 from syslog_server import views as syslog_views
 from backups import views as backup_views
+from automation import views as automation_views
 
 urlpatterns = [
     path('admin/', admin.site.urls),
@@ -53,6 +54,15 @@ urlpatterns = [
     path('inventory/<int:device_id>/backups/compare/', backup_views.backup_compare, name='backup_compare'),
     path('inventory/<int:device_id>/backups/<int:backup_id>/', backup_views.backup_detail, name='backup_detail'),
     path('inventory/<int:device_id>/backups/<int:backup_id>/download/', backup_views.backup_download, name='backup_download'),
+
+    # Automation (push commands to devices)
+    path('automation/', automation_views.history, name='automation'),
+    path('automation/push/', automation_views.push, name='push'),
+    path('automation/push/<int:job_id>/', automation_views.job_detail, name='push_job'),
+    path('automation/push/<int:job_id>/status/', automation_views.job_status, name='push_job_status'),
+    path('automation/scripts/new/', automation_views.script_edit, name='script_new'),
+    path('automation/scripts/<int:script_id>/', automation_views.script_edit, name='script_edit'),
+    path('automation/scripts/<int:script_id>/delete/', automation_views.script_delete, name='script_delete'),
 
     # network Tools
     path('network_tools/', nt_views.tools, name='tools'),

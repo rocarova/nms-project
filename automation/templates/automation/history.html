@@ -1,0 +1,99 @@
+{% extends 'system_management/base.html' %}
+
+{% block title %}Automation{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="page-eyebrow">Manage</div>
+        <h1 class="page-title">Automation</h1>
+        <p class="page-subtitle">Push commands to many network devices at once, and keep reusable scripts</p>
+    </div>
+    <div class="d-flex gap-2">
+        <a href="{% url 'script_new' %}" class="btn-ghost"><i class="bi bi-file-earmark-plus"></i> New script</a>
+        <a href="{% url 'push' %}" class="btn-accent"><i class="bi bi-send"></i> Push commands</a>
+    </div>
+</div>
+
+{% include 'system_management/_messages.html' %}
+
+<div class="panel mb-3" id="scripts">
+    <div class="panel-header">
+        <div>
+            <h2 class="panel-title">Scripts</h2>
+            <p class="panel-subtitle">Saved command sets; {% templatetag openvariable %} variables {% templatetag closevariable %} are filled in per device</p>
+        </div>
+    </div>
+    {% if scripts %}
+    <div class="table-responsive">
+        <table class="data-table">
+            <thead><tr><th>Name</th><th>Mode</th><th>Lines</th><th>Updated</th><th class="text-end">Actions</th></tr></thead>
+            <tbody>
+                {% for script in scripts %}
+                <tr>
+                    <td><div class="primary-cell">{{ script.name }}</div>{% if script.description %}<span class="small text-muted-nms">{{ script.description }}</span>{% endif %}</td>
+                    <td>{% if script.mode == 'config' %}<span class="status is-warning"><i class="bi bi-gear-wide-connected"></i> Configuration</span>{% else %}<span class="status is-muted"><i class="bi bi-terminal"></i> Show / exec</span>{% endif %}</td>
+                    <td class="tabular">{{ script.commands.splitlines|length }}</td>
+                    <td class="text-nowrap"><time data-time="{{ script.updated_at|date:'c' }}" data-format="relative"></time></td>
+                    <td class="text-end text-nowrap">
+                        <a href="{% url 'push' %}?script={{ script.id }}" class="btn-icon" title="Push this script"><i class="bi bi-send"></i></a>
+                        <a href="{% url 'script_edit' script.id %}" class="btn-icon" title="Edit"><i class="bi bi-pencil"></i></a>
+                        <form method="POST" action="{% url 'script_delete' script.id %}" class="d-inline" onsubmit="return confirm('Delete the script &quot;{{ script.name|escapejs }}&quot;? Past pushes keep their own copy of the commands.');">
+                            {% csrf_token %}
+                            <button type="submit" class="btn-icon btn-danger-icon border-0 bg-transparent" title="Delete"><i class="bi bi-trash"></i></button>
+                        </form>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="empty-state">
+        <i class="bi bi-file-earmark-code"></i>
+        <div class="title">No scripts yet</div>
+        <a href="{% url 'script_new' %}">Create a script</a> for commands you push often, e.g. NTP or SNMP settings.
+    </div>
+    {% endif %}
+</div>
+
+<div class="panel">
+    <div class="panel-header">
+        <div>
+            <h2 class="panel-title">Push history</h2>
+            <p class="panel-subtitle">Every push, who ran it and what happened (latest 100)</p>
+        </div>
+    </div>
+    {% if jobs %}
+    <div class="table-responsive">
+        <table class="data-table">
+            <thead><tr><th>#</th><th>When</th><th>By</th><th>Mode</th><th>Devices</th><th>Result</th><th></th></tr></thead>
+            <tbody>
+                {% for job in jobs %}
+                <tr>
+                    <td class="mono">{{ job.id }}</td>
+                    <td class="text-nowrap"><time data-time="{{ job.created_at|date:'c' }}"></time></td>
+                    <td>{{ job.created_by|default:"—" }}</td>
+                    <td>{% if job.mode == 'config' %}Configuration{% else %}Show / exec{% endif %}{% if job.script %}<div class="small text-muted-nms">{{ job.script }}</div>{% endif %}</td>
+                    <td class="tabular">{{ job.ok_count }}/{{ job.device_count }} ok{% if job.failed_count %} · <span style="color: var(--critical-bright)">{{ job.failed_count }} failed</span>{% endif %}</td>
+                    <td>
+                        {% if job.status == 'succeeded' %}<span class="status is-good"><i class="bi bi-check-circle-fill"></i> Succeeded</span>
+                        {% elif job.status == 'failed' %}<span class="status is-critical"><i class="bi bi-exclamation-triangle-fill"></i> Errors</span>
+                        {% elif job.status == 'stopped' %}<span class="status is-warning"><i class="bi bi-sign-stop-fill"></i> Stopped</span>
+                        {% else %}<span class="status is-muted"><i class="bi bi-arrow-repeat"></i> {{ job.get_status_display }}</span>{% endif %}
+                    </td>
+                    <td class="text-end"><a href="{% url 'push_job' job.id %}" class="btn-icon" title="Open"><i class="bi bi-arrow-right"></i></a></td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="empty-state">
+        <i class="bi bi-send"></i>
+        <div class="title">Nothing pushed yet</div>
+        Select devices in the <a href="{% url 'inventory' %}">inventory</a>, or start with <a href="{% url 'push' %}">Push commands</a>.
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

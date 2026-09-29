@@ -60,6 +60,11 @@
                     </a>
                 </li>
                 <li>
+                    <a class="side-link {% if url_name in 'automation,push,push_job,script_new,script_edit' %}active{% endif %}" href="{% url 'automation' %}">
+                        <i class="bi bi-send"></i> Automation
+                    </a>
+                </li>
+                <li>
                     <a class="side-link {% if url_name in 'tools,ping,traceroute,nslookup' %}active{% endif %}" href="{% url 'tools' %}">
                         <i class="bi bi-tools"></i> Network Tools
                     </a>

@@ -67,6 +67,7 @@ INSTALLED_APPS = [
     'dashboard',
     'backups',
     'syslog_server',
+    'automation',
 ]
 
 MIDDLEWARE = [
@@ -113,6 +114,9 @@ DATABASES = {
 if DATABASES['default']['ENGINE'] == 'django.db.backends.sqlite3':
     # Wait for the syslog listener's writes instead of failing with "database is locked"
     DATABASES['default'].setdefault('OPTIONS', {})['timeout'] = 20
+    # Tests use a file, not SQLite's shared in-memory database: that one uses table locks that fail instantly
+    # instead of waiting, which breaks tests of code that writes from several threads (e.g. parallel pushes)
+    DATABASES['default']['TEST'] = {'NAME': BASE_DIR / 'test_db.sqlite3'}
 
 
 # Password validation

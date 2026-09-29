@@ -441,6 +441,16 @@ body {
 .data-table .primary-cell { color: var(--text); font-weight: 600; }
 
 .host-link { color: var(--text); text-decoration: none; white-space: nowrap; }
+
+.data-table .row-check { width: 17px; height: 17px; accent-color: var(--accent); cursor: pointer; vertical-align: middle; }
+.data-table tbody tr.is-selected td { background: var(--accent-soft); }
+.selection-bar {
+    position: sticky; bottom: 16px; z-index: 5; margin-top: 16px;
+    display: flex; align-items: center; gap: 12px; padding: 12px 16px; font-size: 0.9rem;
+    background: var(--surface-2); border: 1px solid rgba(34, 211, 238, 0.4); border-radius: 12px;
+    box-shadow: 0 16px 40px rgba(0, 0, 0, 0.45), var(--accent-glow);
+}
+.selection-bar[hidden] { display: none; }
 .host-link > i:first-child { color: var(--muted); }
 .host-link > i:last-child { color: var(--muted); opacity: 0; transition: opacity 0.15s; }
 .host-link:hover { color: var(--accent); }
@@ -886,3 +896,58 @@ a.tool-card:hover { color: var(--text); border-color: rgba(34, 211, 238, 0.45); 
 .tool-card.is-disabled { opacity: 0.55; }
 .tool-card h3 { font-size: 1.05rem; font-weight: 600; margin-bottom: 6px; }
 .tool-card p { color: var(--text-2); font-size: 0.88rem; margin: 0; }
+
+/* ==========================================================================
+   Automation (push commands)
+   ========================================================================== */
+
+.stepper { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 20px; }
+.stepper .step-item {
+    display: flex; align-items: center; gap: 8px; padding: 6px 14px 6px 6px; border-radius: 999px;
+    font-size: 0.82rem; color: var(--muted); background: var(--surface); border: 1px solid var(--border);
+}
+.stepper .step-item .num {
+    width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; font-weight: 700; font-size: 0.75rem;
+    background: var(--surface-3); color: var(--text-2);
+}
+.stepper .step-item.is-current { color: var(--text); border-color: rgba(34, 211, 238, 0.45); }
+.stepper .step-item.is-current .num { background: var(--accent); color: #04222a; }
+.stepper .step-item.is-done .num { background: rgba(12, 163, 12, 0.25); color: var(--good-bright); }
+
+/* Mode choice: radio buttons rendered as cards */
+.choice-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; margin-bottom: 18px; }
+.choice-card { position: relative; display: block; cursor: pointer; margin: 0; }
+.choice-card input { position: absolute; opacity: 0; pointer-events: none; }
+.choice-card .card-body-inner {
+    display: flex; gap: 12px; padding: 14px; border-radius: 12px; height: 100%;
+    background: var(--bg); border: 1px solid var(--border-strong); transition: border-color 0.15s, background-color 0.15s;
+}
+.choice-card .card-body-inner i { font-size: 1.3rem; color: var(--muted); }
+.choice-card .title { display: block; font-weight: 600; color: var(--text); font-size: 0.92rem; text-transform: none; letter-spacing: 0; }
+.choice-card .desc { display: block; font-size: 0.8rem; color: var(--muted); font-weight: 400; text-transform: none; letter-spacing: 0; margin-top: 2px; }
+.choice-card input:checked + .card-body-inner { border-color: var(--accent); background: var(--accent-soft); }
+.choice-card input:checked + .card-body-inner i { color: var(--accent); }
+.choice-card input:focus-visible + .card-body-inner { box-shadow: 0 0 0 3px rgba(34, 211, 238, 0.25); }
+
+/* Clickable {{ variable }} chips */
+.var-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.var-chip {
+    font-family: var(--font-mono); font-size: 0.75rem; padding: 2px 8px; border-radius: 6px; cursor: pointer;
+    color: var(--accent); background: var(--accent-soft); border: 1px solid rgba(34, 211, 238, 0.25);
+}
+.var-chip:hover { border-color: var(--accent); }
+
+/* Device picker */
+.picker-scroll { max-height: 520px; overflow-y: auto; }
+.picker-table td, .picker-table th { padding: 9px 14px; }
+.picker-table tr.is-disabled td { opacity: 0.45; }
+.picker-table input[type="checkbox"] { width: 17px; height: 17px; accent-color: var(--accent); cursor: pointer; }
+.picker-table tbody tr.is-selectable { cursor: pointer; }
+.picker-table tbody tr.is-checked td { background: var(--accent-soft); }
+
+.code-block {
+    background: #050a14; border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; margin: 0;
+    font-family: var(--font-mono); font-size: 0.8rem; line-height: 1.55; color: var(--text); white-space: pre-wrap; word-break: break-word;
+}
+.code-block .wrap-cmd { color: var(--muted); }
+.code-block.terminal-output { color: var(--accent); max-height: 420px; overflow: auto; }

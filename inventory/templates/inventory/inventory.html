@@ -19,6 +19,7 @@
         <table class="data-table">
             <thead>
                 <tr>
+                    <th style="width: 44px;"><input type="checkbox" class="row-check" id="select-all" aria-label="Select all devices"></th>
                     <th>Hostname</th>
                     <th>IP address</th>
                     <th>Vendor</th>
@@ -30,7 +31,11 @@
             </thead>
             <tbody>
                 {% for device in devices %}
-                <tr>
+                <tr data-id="{{ device.id }}">
+                    <td>
+                        {% if device.enabled %}<input type="checkbox" class="row-check device-check" value="{{ device.id }}" aria-label="Select {{ device.hostname }}">
+                        {% else %}<i class="bi bi-slash-circle text-muted-nms" title="Disabled devices can't be selected for a push"></i>{% endif %}
+                    </td>
                     <td class="primary-cell">
                         <a href="{% url 'device_backups' device.id %}" target="_blank" rel="noopener" class="host-link" title="Open {{ device.hostname }} backups in a new window">
                             <i class="bi bi-hdd-network me-2"></i>{{ device.hostname }}<i class="bi bi-box-arrow-up-right ms-2 small"></i>
@@ -66,7 +71,7 @@
                 </tr>
                 {% empty %}
                 <tr>
-                    <td colspan="7">
+                    <td colspan="8">
                         <div class="empty-state">
                             <i class="bi bi-hdd-rack"></i>
                             <div class="title">No network devices in the inventory</div>
@@ -79,10 +84,39 @@
         </table>
     </div>
 </div>
+
+<div class="selection-bar" id="selection-bar" hidden>
+    <i class="bi bi-check2-square" style="color: var(--accent)"></i>
+    <span><strong id="selection-count">0</strong> selected</span>
+    <button type="button" class="btn-ghost py-1" id="clear-selection">Clear</button>
+    <a href="{% url 'push' %}" class="btn-accent ms-auto" id="push-selected"><i class="bi bi-send"></i> Push commands</a>
+</div>
 {% endblock %}
 
 {% block scripts %}
 <script>
+    // Multi-select: pick devices, then push commands to all of them
+    (() => {
+        const checks = [...document.querySelectorAll('.device-check')];
+        const selectAll = document.getElementById('select-all');
+        const bar = document.getElementById('selection-bar');
+        const pushLink = document.getElementById('push-selected');
+        const pushBase = pushLink.getAttribute('href');
+        const update = () => {
+            const ids = checks.filter(c => c.checked).map(c => c.value);
+            checks.forEach(c => c.closest('tr').classList.toggle('is-selected', c.checked));
+            document.getElementById('selection-count').textContent = ids.length;
+            bar.hidden = ids.length === 0;
+            selectAll.checked = checks.length > 0 && ids.length === checks.length;
+            selectAll.indeterminate = ids.length > 0 && ids.length < checks.length;
+            pushLink.href = `${pushBase}?devices=${ids.join(',')}`;
+        };
+        checks.forEach(c => c.addEventListener('change', update));
+        selectAll.addEventListener('change', () => { checks.forEach(c => c.checked = selectAll.checked); update(); });
+        document.getElementById('clear-selection').addEventListener('click', () => { checks.forEach(c => c.checked = false); update(); });
+        update();
+    })();
+
     // Open each device's console in its own window (clicking again focuses the existing one)
     document.querySelectorAll('.btn-ssh').forEach(link => link.addEventListener('click', event => {
         const win = window.open(link.href, link.dataset.window, 'width=1100,height=700,menubar=no,toolbar=no,location=no');

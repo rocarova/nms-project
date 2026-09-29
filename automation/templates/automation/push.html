@@ -1,0 +1,288 @@
+{% extends 'system_management/base.html' %}
+
+{% block title %}Push commands{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="page-eyebrow"><a href="{% url 'automation' %}" class="text-decoration-none">Automation</a> <i class="bi bi-chevron-right small"></i> Push</div>
+        <h1 class="page-title">Push commands</h1>
+        <p class="page-subtitle">Run configuration or show commands on several network devices at once</p>
+    </div>
+    <a href="{% url 'automation' %}" class="btn-ghost"><i class="bi bi-clock-history"></i> Push history</a>
+</div>
+
+<div class="stepper">
+    <span class="step-item {% if step == 'edit' %}is-current{% else %}is-done{% endif %}"><span class="num">{% if step == 'edit' %}1{% else %}<i class="bi bi-check"></i>{% endif %}</span> Devices &amp; commands</span>
+    <span class="step-item {% if step == 'preview' %}is-current{% endif %}"><span class="num">2</span> Preview &amp; confirm</span>
+    <span class="step-item"><span class="num">3</span> Results</span>
+</div>
+
+<form method="POST" id="push-form" novalidate>
+    {% csrf_token %}
+    {% for error in form.non_field_errors %}<div class="alert-nms"><i class="bi bi-exclamation-triangle-fill"></i> <span>{{ error }}</span></div>{% endfor %}
+
+    {% if step == 'edit' %}
+    <div class="row g-3 align-items-start">
+        <!-- Devices -->
+        <div class="col-xl-5">
+            <div class="panel">
+                <div class="panel-header">
+                    <div>
+                        <h2 class="panel-title">Devices</h2>
+                        <p class="panel-subtitle"><span id="selected-count">0</span> selected</p>
+                    </div>
+                    <div class="input-icon" style="width: 190px;">
+                        <i class="bi bi-search"></i>
+                        <input type="search" class="input-nms" id="device-filter" placeholder="Filter" style="padding-left: 38px; padding-top: 7px; padding-bottom: 7px;" aria-label="Filter devices">
+                    </div>
+                </div>
+                {% for error in form.devices.errors %}<div class="field-error px-3 pt-2">{{ error }}</div>{% endfor %}
+                <div class="picker-scroll">
+                    <table class="data-table picker-table">
+                        <thead><tr>
+                            <th style="width: 40px"><input type="checkbox" id="select-all" aria-label="Select all visible devices"></th>
+                            <th>Device</th><th>Vendor</th><th>Location</th>
+                        </tr></thead>
+                        <tbody>
+                            {% for row in rows %}
+                            <tr class="{% if row.device.enabled %}is-selectable{% else %}is-disabled{% endif %}" data-search="{{ row.device.hostname|lower }} {{ row.device.ip_address }} {{ row.device.vendor|lower }} {{ row.device.location|lower }}">
+                                <td>
+                                    {% if row.device.enabled %}
+                                    <input type="checkbox" name="devices" value="{{ row.device.id }}" {% if row.selected %}checked{% endif %} aria-label="Select {{ row.device.hostname }}">
+                                    {% else %}
+                                    <i class="bi bi-slash-circle text-muted-nms" title="Disabled devices can't be selected"></i>
+                                    {% endif %}
+                                </td>
+                                <td><div class="primary-cell">{{ row.device.hostname }}</div><span class="mono small text-muted-nms">{{ row.device.ip_address }}</span></td>
+                                <td>{{ row.device.vendor }}</td>
+                                <td>{{ row.device.location }}</td>
+                            </tr>
+                            {% empty %}
+                            <tr><td colspan="4"><div class="empty-state"><i class="bi bi-hdd-rack"></i><div class="title">No network devices</div><a href="{% url 'add_device' %}">Add a device</a> first.</div></td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Commands -->
+        <div class="col-xl-7">
+            <div class="panel custom-device-form">
+                <div class="form-section">
+                    <label class="mb-2">Mode</label>
+                    <div class="choice-cards">
+                        <label class="choice-card">
+                            <input type="radio" name="mode" value="config" {% if form.mode.value == 'config' %}checked{% endif %}>
+                            <span class="card-body-inner"><i class="bi bi-gear-wide-connected"></i><span>
+                                <span class="title">Configuration</span>
+                                <span class="desc">Enters config mode. Backs up each device before and after, and shows what changed.</span>
+                            </span></span>
+                        </label>
+                        <label class="choice-card">
+                            <input type="radio" name="mode" value="exec" {% if form.mode.value == 'exec' %}checked{% endif %}>
+                            <span class="card-body-inner"><i class="bi bi-terminal"></i><span>
+                                <span class="title">Show / exec</span>
+                                <span class="desc">Runs commands as typed, e.g. show version, and collects each device's output.</span>
+                            </span></span>
+                        </label>
+                    </div>
+
+                    <div class="field-container">
+                        <label for="id_script">Saved script</label>
+                        <div class="input-group-custom">
+                            <div class="input-icon flex-grow-1">
+                                <i class="bi bi-file-earmark-code"></i>
+                                <select name="script" id="id_script">
+                                    <option value="">— Type commands below —</option>
+                                    {% for script in scripts %}
+                                    <option value="{{ script.id }}" data-mode="{{ script.mode }}" data-commands="{{ script.commands }}" {% if form.script.value|stringformat:'s' == script.id|stringformat:'s' %}selected{% endif %}>{{ script.name }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <a href="{% url 'script_new' %}" class="btn-add-inline" title="New script" aria-label="New script"><i class="bi bi-plus-lg"></i></a>
+                        </div>
+                    </div>
+
+                    <div class="field-container{% if form.commands.errors %} has-error{% endif %}">
+                        <label for="id_commands">Commands</label>
+                        {{ form.commands }}
+                        <div class="var-chips">
+                            <span class="small text-muted-nms me-1">Insert:</span>
+                            <span class="var-chip" data-insert="{% templatetag openvariable %} hostname {% templatetag closevariable %}">{% templatetag openvariable %} hostname {% templatetag closevariable %}</span>
+                            <span class="var-chip" data-insert="{% templatetag openvariable %} ip_address {% templatetag closevariable %}">{% templatetag openvariable %} ip_address {% templatetag closevariable %}</span>
+                            <span class="var-chip" data-insert="{% templatetag openvariable %} location {% templatetag closevariable %}">{% templatetag openvariable %} location {% templatetag closevariable %}</span>
+                            <span class="var-chip" data-insert="{% templatetag openvariable %} vendor {% templatetag closevariable %}">{% templatetag openvariable %} vendor {% templatetag closevariable %}</span>
+                            <span class="var-chip" data-insert="{% templatetag openvariable %} username {% templatetag closevariable %}">{% templatetag openvariable %} username {% templatetag closevariable %}</span>
+                        </div>
+                        <small class="helptext">One command per line. Lines starting with # are comments and are not sent.</small>
+                        {% for error in form.commands.errors %}<div class="field-error">{{ error }}</div>{% endfor %}
+                    </div>
+
+                    <div id="config-options">
+                        <label class="toggle-row" for="id_save_config">
+                            <span><span class="toggle-title">Save to startup config</span>
+                                <span class="toggle-desc">write memory / copy run start after a successful push (Junos always commits)</span></span>
+                            <span class="form-check form-switch m-0"><input class="form-check-input" type="checkbox" role="switch" name="save_config" id="id_save_config" {% if form.save_config.value %}checked{% endif %}></span>
+                        </label>
+                    </div>
+                    <label class="toggle-row" for="id_stop_on_error">
+                        <span><span class="toggle-title">Stop on first error</span>
+                            <span class="toggle-desc">Push one device at a time and skip the rest if a device fails (otherwise 5 at a time, all attempted)</span></span>
+                        <span class="form-check form-switch m-0"><input class="form-check-input" type="checkbox" role="switch" name="stop_on_error" id="id_stop_on_error" {% if form.stop_on_error.value %}checked{% endif %}></span>
+                    </label>
+                </div>
+                <div class="form-footer">
+                    <button type="submit" name="action" value="preview" class="btn-accent"><i class="bi bi-eye"></i> Preview</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {% else %}
+    <!-- Preview: carry the choices forward unchanged -->
+    {% for device in devices %}<input type="hidden" name="devices" value="{{ device.id }}">{% endfor %}
+    <input type="hidden" name="mode" value="{{ form.cleaned_data.mode }}">
+    <input type="hidden" name="script" value="{{ form.cleaned_data.script.id|default:'' }}">
+    <textarea name="commands" hidden>{{ form.cleaned_data.commands }}</textarea>
+    {% if form.cleaned_data.save_config %}<input type="hidden" name="save_config" value="on">{% endif %}
+    {% if form.cleaned_data.stop_on_error %}<input type="hidden" name="stop_on_error" value="on">{% endif %}
+
+    {% with config=is_config %}
+    <div class="panel mb-3">
+        <div class="panel-body">
+            <div class="d-flex flex-wrap gap-2 mb-3">
+                <span class="status {% if config %}is-warning{% else %}is-muted{% endif %}"><i class="bi {% if config %}bi-gear-wide-connected{% else %}bi-terminal{% endif %}"></i> {% if config %}Configuration change{% else %}Show / exec{% endif %}</span>
+                <span class="status is-muted"><i class="bi bi-hdd-network"></i> {{ devices|length }} device{{ devices|length|pluralize }}</span>
+                {% if form.cleaned_data.script %}<span class="status is-muted"><i class="bi bi-file-earmark-code"></i> {{ form.cleaned_data.script }}</span>{% endif %}
+                {% if config %}<span class="status is-muted"><i class="bi bi-save"></i> {% if form.cleaned_data.save_config %}Saves config{% else %}Does not save config{% endif %}</span>{% endif %}
+                <span class="status is-muted"><i class="bi bi-sign-stop"></i> {% if form.cleaned_data.stop_on_error %}Stops on first error{% else %}Continues after errors{% endif %}</span>
+            </div>
+            {% if config %}
+            <div class="notice mb-0">
+                <i class="bi bi-info-circle-fill"></i>
+                <div>Each device is <strong>backed up before and after</strong>. If the pre-change backup fails, nothing is sent to that device.
+                    On most platforms (Cisco, Arista, Aruba) each line takes effect as soon as it's accepted; if a line is rejected, no more lines are sent to that device.
+                    Junos changes are committed only if every line is accepted.</div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="panel mb-3">
+        <div class="panel-header">
+            <div>
+                <h2 class="panel-title">What each device will receive</h2>
+                <p class="panel-subtitle">Variables filled in; config-mode and save commands added for the vendor</p>
+            </div>
+        </div>
+        <div class="panel-body d-grid gap-3">
+            {% for p in previews %}
+            <details {% if forloop.first %}open{% endif %}>
+                <summary class="d-flex align-items-center gap-2" style="cursor: pointer; list-style: none;">
+                    <i class="bi bi-chevron-right small text-muted-nms"></i>
+                    <span class="primary-cell fw-semibold">{{ p.device.hostname }}</span>
+                    <span class="mono small text-muted-nms">{{ p.device.ip_address }} · {{ p.device.vendor }}</span>
+                    <span class="ms-auto small text-muted-nms">{{ p.lines|length }} line{{ p.lines|length|pluralize }}</span>
+                </summary>
+<pre class="code-block mt-2">{% if config and p.profile.enter %}<span class="wrap-cmd">{{ p.profile.enter }}</span>
+{% endif %}{% for line in p.lines %}{{ line }}
+{% endfor %}{% if config and p.profile.exit %}<span class="wrap-cmd">{{ p.profile.exit }}</span>
+{% endif %}{% if config and form.cleaned_data.save_config and p.profile.save %}<span class="wrap-cmd">{{ p.profile.save }}</span>
+{% endif %}</pre>
+            </details>
+            {% endfor %}
+        </div>
+    </div>
+
+    <div class="panel {% if config %}custom-device-form{% endif %}" {% if config %}style="border-color: rgba(250, 178, 25, 0.4);"{% endif %}>
+        {% if config %}
+        <div class="form-section">
+            <div class="field-container{% if form.confirm.errors %} has-error{% endif %}" style="max-width: 360px;">
+                <label for="id_confirm">Type PUSH to confirm</label>
+                <input type="text" name="confirm" id="id_confirm" class="mono" autocomplete="off" placeholder="PUSH" autofocus>
+                {% for error in form.confirm.errors %}<div class="field-error">{{ error }}</div>{% endfor %}
+            </div>
+        </div>
+        {% endif %}
+        <div class="form-footer">
+            <button type="submit" name="action" value="edit" class="btn-ghost me-auto"><i class="bi bi-arrow-left"></i> Back to edit</button>
+            <button type="submit" name="action" value="run" class="btn-accent" id="run-btn">
+                <i class="bi bi-send"></i> {% if config %}Push to{% else %}Run on{% endif %} {{ devices|length }} device{{ devices|length|pluralize }}
+            </button>
+        </div>
+    </div>
+    {% endwith %}
+    {% endif %}
+</form>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(() => {
+    const form = document.getElementById('push-form');
+    const runButton = document.getElementById('run-btn');
+    if (runButton) {
+        form.addEventListener('submit', event => {
+            if (event.submitter === runButton) {
+                setTimeout(() => { runButton.disabled = true; runButton.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Starting…'; });
+            }
+        });
+        return;  // Preview step: nothing else to wire up
+    }
+
+    // Device picker: filter, select all visible, click anywhere on a row
+    const rows = [...document.querySelectorAll('.picker-table tbody tr.is-selectable')];
+    const count = document.getElementById('selected-count');
+    const selectAll = document.getElementById('select-all');
+    const update = () => {
+        rows.forEach(r => r.classList.toggle('is-checked', r.querySelector('input').checked));
+        count.textContent = rows.filter(r => r.querySelector('input').checked).length;
+        const visible = rows.filter(r => !r.hidden);
+        selectAll.checked = visible.length > 0 && visible.every(r => r.querySelector('input').checked);
+    };
+    rows.forEach(r => r.addEventListener('click', e => {
+        if (e.target.tagName !== 'INPUT') r.querySelector('input').checked = !r.querySelector('input').checked;
+        update();
+    }));
+    selectAll.addEventListener('change', () => { rows.filter(r => !r.hidden).forEach(r => r.querySelector('input').checked = selectAll.checked); update(); });
+    document.getElementById('device-filter').addEventListener('input', e => {
+        const term = e.target.value.trim().toLowerCase();
+        rows.concat([...document.querySelectorAll('.picker-table tbody tr.is-disabled')])
+            .forEach(r => r.hidden = term && !r.dataset.search.includes(term));
+        update();
+    });
+    update();
+
+    // Mode: saving only applies to configuration pushes
+    const configOptions = document.getElementById('config-options');
+    const syncMode = () => { configOptions.hidden = form.querySelector('input[name="mode"]:checked')?.value !== 'config'; };
+    form.querySelectorAll('input[name="mode"]').forEach(r => r.addEventListener('change', syncMode));
+    syncMode();
+
+    // Script picker fills in the commands and mode (asks before replacing typed commands)
+    const commands = document.getElementById('id_commands');
+    const scriptSelect = document.getElementById('id_script');
+    let loadedText = scriptSelect.selectedOptions[0]?.dataset.commands ?? '';
+    scriptSelect.addEventListener('change', () => {
+        const option = scriptSelect.selectedOptions[0];
+        if (!option.value) return;
+        if (commands.value.trim() && commands.value !== loadedText && !confirm('Replace the commands you typed with this script?')) {
+            scriptSelect.value = '';
+            return;
+        }
+        commands.value = loadedText = option.dataset.commands;
+        form.querySelector(`input[name="mode"][value="${option.dataset.mode}"]`).checked = true;
+        syncMode();
+    });
+
+    // Variable chips insert at the cursor
+    document.querySelectorAll('.var-chip').forEach(chip => chip.addEventListener('click', () => {
+        const [start, end] = [commands.selectionStart, commands.selectionEnd];
+        commands.setRangeText(chip.dataset.insert, start, end, 'end');
+        commands.focus();
+    }));
+})();
+</script>
+{% endblock %}

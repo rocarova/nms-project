@@ -1,0 +1,160 @@
+{% extends 'system_management/base.html' %}
+
+{% block title %}Push #{{ job.id }}{% endblock %}
+
+{% block content %}
+<style>
+    .result-row { border-bottom: 1px solid var(--border); }
+    .result-row:last-child { border-bottom: none; }
+    .result-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 14px 20px; cursor: pointer; }
+    .result-head:hover { background: rgba(148, 163, 184, 0.04); }
+    .result-head .chev { color: var(--muted); transition: transform 0.15s; }
+    .result-row.is-open .chev { transform: rotate(90deg); }
+    .result-body { display: none; padding: 0 20px 18px 48px; }
+    .result-row.is-open .result-body { display: block; }
+    .result-error { color: var(--critical-bright); font-size: 0.85rem; margin-bottom: 10px; }
+    .status.is-running i { animation: spin 1s linear infinite; display: inline-block; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+
+<div class="page-header">
+    <div>
+        <div class="page-eyebrow"><a href="{% url 'automation' %}" class="text-decoration-none">Automation</a> <i class="bi bi-chevron-right small"></i> Push #{{ job.id }}</div>
+        <h1 class="page-title">{% if job.mode == 'config' %}Configuration push{% else %}Show / exec run{% endif %} #{{ job.id }}</h1>
+        <p class="page-subtitle">
+            Started by {{ job.created_by|default:"a deleted user" }} <time data-time="{{ job.created_at|date:'c' }}" data-format="relative"></time>
+            {% if job.script %}· script <strong>{{ job.script }}</strong>{% endif %}
+            {% if job.mode == 'config' %}· {% if job.save_config %}saves config{% else %}doesn't save config{% endif %}{% endif %}
+            · {% if job.stop_on_error %}stops on first error{% else %}continues after errors{% endif %}
+        </p>
+    </div>
+    <div class="d-flex gap-2">
+        <span class="status is-muted" id="job-status"><span class="spinner-border spinner-border-sm"></span> Loading…</span>
+        <a href="{% url 'push' %}" class="btn-ghost"><i class="bi bi-plus-lg"></i> New push</a>
+    </div>
+</div>
+
+<div class="row g-3 mb-3" id="counters">
+    <div class="col-6 col-md-3"><div class="panel kpi kpi-good"><div class="kpi-label">Succeeded</div><div class="kpi-value" data-count="succeeded">0</div></div></div>
+    <div class="col-6 col-md-3"><div class="panel kpi kpi-critical"><div class="kpi-label">Failed</div><div class="kpi-value" data-count="failed">0</div></div></div>
+    <div class="col-6 col-md-3"><div class="panel kpi kpi-accent"><div class="kpi-label">Running / waiting</div><div class="kpi-value" data-count="active">0</div></div></div>
+    <div class="col-6 col-md-3"><div class="panel kpi kpi-warning"><div class="kpi-label">Skipped</div><div class="kpi-value" data-count="skipped">0</div></div></div>
+</div>
+
+<div class="panel mb-3">
+    <div class="panel-header">
+        <div>
+            <h2 class="panel-title">Devices</h2>
+            <p class="panel-subtitle">Click a device to see its commands and full output</p>
+        </div>
+    </div>
+    <div id="results"><div class="empty-state"><div class="spinner-border spinner-border-sm text-info"></div></div></div>
+</div>
+
+<details class="panel">
+    <summary class="panel-header" style="cursor: pointer;"><h2 class="panel-title">Commands as entered</h2></summary>
+    <div class="panel-body"><pre class="code-block">{{ job.commands }}</pre></div>
+</details>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(() => {
+    const STATUS_URL = "{% url 'push_job_status' job.id %}";
+    const CONFIG = "{{ job.mode }}" === 'config';
+    const resultsEl = document.getElementById('results');
+    const jobStatus = document.getElementById('job-status');
+    const open = new Set();
+
+    const BADGES = {
+        pending: ['is-muted', 'bi-hourglass', 'Waiting'],
+        running: ['is-muted is-running', 'bi-arrow-repeat', 'Running'],
+        succeeded: ['is-good', 'bi-check-circle-fill', 'Succeeded'],
+        failed: ['is-critical', 'bi-x-circle-fill', 'Failed'],
+        skipped: ['is-warning', 'bi-skip-forward-fill', 'Skipped'],
+    };
+    const JOB_BADGES = {
+        pending: ['is-muted', 'bi-hourglass'], running: ['is-muted is-running', 'bi-arrow-repeat'],
+        succeeded: ['is-good', 'bi-check-circle-fill'], failed: ['is-critical', 'bi-exclamation-triangle-fill'],
+        stopped: ['is-warning', 'bi-sign-stop-fill'],
+    };
+
+    function el(tag, className, text) {
+        const node = document.createElement(tag);
+        if (className) node.className = className;
+        if (text !== undefined) node.textContent = text;
+        return node;
+    }
+
+    function badge([cls, icon, label]) {
+        const span = el('span', `status ${cls}`);
+        span.append(el('i', `bi ${icon}`), ` ${label}`);
+        return span;
+    }
+
+    function link(href, icon, label) {
+        const a = el('a', 'btn-ghost py-1 px-2 small');
+        a.href = href; a.target = '_blank'; a.rel = 'noopener';
+        a.append(el('i', `bi ${icon}`), ` ${label}`);
+        a.addEventListener('click', e => e.stopPropagation());
+        return a;
+    }
+
+    function renderRow(r) {
+        const row = el('div', 'result-row' + (open.has(r.id) ? ' is-open' : ''));
+        const head = el('div', 'result-head');
+        head.append(el('i', 'bi bi-chevron-right chev'));
+        const name = el('div');
+        name.append(el('div', 'primary-cell', r.hostname), el('div', 'mono small text-muted-nms', r.ip_address));
+        head.append(name, badge(BADGES[r.status]));
+
+        if (CONFIG && r.config_changed === true) head.append(badge(['is-warning', 'bi-arrow-left-right', 'Config changed']));
+        if (CONFIG && r.config_changed === false) head.append(badge(['is-muted', 'bi-dash-circle', 'No change']));
+        if (r.saved) head.append(badge(['is-good', 'bi-save', 'Saved']));
+
+        const links = el('div', 'ms-auto d-flex gap-2 flex-wrap');
+        if (r.compare_url) links.append(link(r.compare_url, 'bi-file-diff', 'Before/after diff'));
+        if (r.after_url) links.append(link(r.after_url, 'bi-eye', 'New config'));
+        head.append(links);
+        head.addEventListener('click', () => {
+            open.has(r.id) ? open.delete(r.id) : open.add(r.id);
+            row.classList.toggle('is-open');
+        });
+
+        const body = el('div', 'result-body');
+        if (r.error) body.append(el('div', 'result-error', r.error));
+        body.append(el('div', 'small text-muted-nms mb-1', 'Commands sent'), el('pre', 'code-block mb-3', r.commands || '(none)'));
+        body.append(el('div', 'small text-muted-nms mb-1', 'Device output'),
+                    el('pre', 'code-block terminal-output', r.output || (r.status === 'running' ? 'Running…' : '(no output)')));
+        row.append(head, body);
+        return row;
+    }
+
+    async function poll() {
+        let data;
+        try {
+            const response = await fetch(STATUS_URL, { headers: { Accept: 'application/json' } });
+            data = await response.json();
+        } catch (e) {
+            setTimeout(poll, 5000);
+            return;
+        }
+        const [cls, icon] = JOB_BADGES[data.status];
+        jobStatus.className = `status ${cls}`;
+        jobStatus.replaceChildren(el('i', `bi ${icon}`), ` ${data.status_label}`);
+
+        const c = data.counts;
+        document.querySelector('[data-count="succeeded"]').textContent = c.succeeded;
+        document.querySelector('[data-count="failed"]').textContent = c.failed;
+        document.querySelector('[data-count="active"]').textContent = c.running + c.pending;
+        document.querySelector('[data-count="skipped"]').textContent = c.skipped;
+
+        // Failed devices open automatically so the error is visible
+        data.results.filter(r => r.status === 'failed').forEach(r => { if (!open.has(`seen-${r.id}`)) { open.add(r.id); open.add(`seen-${r.id}`); } });
+        resultsEl.replaceChildren(...data.results.map(renderRow));
+        if (!data.finished) setTimeout(poll, 2000);
+    }
+    poll();
+})();
+</script>
+{% endblock %}
