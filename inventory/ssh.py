@@ -3,6 +3,8 @@ import asyncio
 
 import asyncssh
 
+from . import platforms
+
 CONNECT_TIMEOUT = 15
 
 # Older devices (e.g. Cisco IOS 12.x/15.x) only offer legacy algorithms; '+' appends them after the secure defaults
@@ -18,12 +20,22 @@ class ConnectError(Exception):
     """A connection problem, with a message that can be shown to the user as-is."""
 
 
-async def connect(device):
-    """Opens an SSH connection to a device with its stored credentials. Raises ConnectError."""
+def login_name(device, automation):
+    """The SSH username; automated sessions to RouterOS add login options for clean, unwrapped output."""
+    if automation and platforms.platform_for(device) == platforms.MIKROTIK:
+        return device.username + platforms.MIKROTIK_LOGIN_OPTIONS
+    return device.username
+
+
+async def connect(device, automation=False):
+    """Opens an SSH connection to a device with its stored credentials. Raises ConnectError.
+
+    automation=True for backups and pushes (not the interactive console).
+    """
     try:
         return await asyncio.wait_for(asyncssh.connect(
             device.ip_address,
-            username=device.username,
+            username=login_name(device, automation),
             password=device.password,
             known_hosts=None,  # Host keys aren't tracked yet; see the README security notes
             client_keys=None,  # Only use the stored password, never the server's own SSH keys

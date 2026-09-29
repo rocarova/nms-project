@@ -163,7 +163,8 @@
             <div class="notice mb-0">
                 <i class="bi bi-info-circle-fill"></i>
                 <div>Each device is <strong>backed up before and after</strong>. If the pre-change backup fails, nothing is sent to that device.
-                    On most platforms (Cisco, Arista, Aruba) each line takes effect as soon as it's accepted; if a line is rejected, no more lines are sent to that device.
+                    On most platforms (Cisco, Arista, Aruba, MikroTik) each line takes effect as soon as it's accepted; if a line is rejected, no more lines are sent to that device.
+                    MikroTik RouterOS has no configuration mode and saves every change immediately, so its commands are sent as written.
                     Junos changes are committed only if every line is accepted.</div>
             </div>
             {% endif %}

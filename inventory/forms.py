@@ -1,5 +1,6 @@
 from django.forms import ModelForm, TextInput, Textarea, PasswordInput
 from .models import Device, Vendor, Location
+from .platforms import recognized_vendors_help
 
 class DeviceForm(ModelForm):
     class Meta:
@@ -32,10 +33,11 @@ class VendorForm(ModelForm):
     class Meta:
         model = Vendor
         fields = ['name', 'description']
+        help_texts = {'name': recognized_vendors_help()}
 
         # This adds the styling classes your CSS expects
         widgets = {
-            'name': TextInput(attrs={'placeholder': 'e.g. Cisco, Juniper...'}),
+            'name': TextInput(attrs={'placeholder': 'e.g. Cisco, Juniper, MikroTik...'}),
             'description': Textarea(attrs={'rows': 3, 'placeholder': 'Optional vendor details...'}),
         }
 

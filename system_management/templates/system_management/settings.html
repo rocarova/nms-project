@@ -149,6 +149,8 @@
                         <div>
                             <strong>If you change the port</strong>, update your network devices and allow it through the firewall. On Cisco:
                             <pre class="snippet">logging host {{ server_ip }} transport udp port {{ system.syslog_port }}</pre>
+                            On MikroTik RouterOS:
+                            <pre class="snippet">/system logging action set [find name=remote] remote={{ server_ip }} remote-port={{ system.syslog_port }}</pre>
                         </div>
                     </div>
                 </div>

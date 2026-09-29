@@ -5,7 +5,7 @@ import re
 
 import asyncssh
 
-from inventory import ssh
+from inventory import platforms, ssh
 from system_management.models import SystemSettings
 from system_management.notifications import notify
 from .models import ConfigBackup
@@ -16,16 +16,17 @@ COMMAND_TIMEOUT = 45     # seconds for the config command to finish
 SHELL_IDLE_TIMEOUT = 4   # interactive fallback: output is complete after this long without new data
 MIN_CONFIG_LINES = 3
 
-# (vendor name keywords, commands to disable paging in an interactive shell, command that prints the config)
-VENDOR_PROFILES = [
-    (('juniper', 'junos'), ['set cli screen-length 0'], 'show configuration | no-more'),
-    (('aruba', 'procurve', 'hpe', 'hewlett'), ['no page'], 'show running-config'),
-    (('mikrotik', 'routeros'), [], '/export'),
-    (('fortinet', 'fortigate'), [], 'show'),
-    (('nexus', 'nx-os', 'nxos'), ['terminal length 0'], 'show running-config'),
-    (('arista',), ['terminal length 0'], 'show running-config'),
-]
-DEFAULT_PROFILE = (['terminal length 0', 'terminal pager 0'], 'show running-config')  # Cisco IOS/IOS-XE/ASA and most others
+# platform -> (commands to disable paging in an interactive shell, commands that print the config, tried in order)
+VENDOR_PROFILES = {
+    platforms.JUNOS: (['set cli screen-length 0'], ['show configuration | no-more']),
+    platforms.ARUBA: (['no page'], ['show running-config']),
+    # "terse" puts every item on one line (clean diffs); RouterOS versions without it fall back to plain /export
+    platforms.MIKROTIK: ([], ['/export terse', '/export']),
+    platforms.FORTINET: ([], ['show']),
+    platforms.NXOS: (['terminal length 0'], ['show running-config']),
+    platforms.ARISTA: (['terminal length 0'], ['show running-config']),
+}
+DEFAULT_PROFILE = (['terminal length 0', 'terminal pager 0'], ['show running-config'])  # Cisco IOS/IOS-XE/ASA and most others
 
 # Lines that change on every run without any real config change; stored configs leave them out
 VOLATILE_LINES = re.compile(
@@ -37,12 +38,17 @@ VOLATILE_LINES = re.compile(
     r'|!\s*No configuration change since last restart'
     r'|!\s*Running configuration last done at'
     r'|ntp clock-period'                      # IOS rewrites this as the clock drifts
-    r'|# \w{3} \w{3}\s+\d+ [\d:]+ \d{4} by RouterOS'  # MikroTik export timestamp
+    r'|#.* by RouterOS '                      # RouterOS export header, v7 "# 2026-09-29 10:00:00 by RouterOS 7.16"
+                                              # and v6 "# sep/29/2026 10:00:00 by RouterOS 6.49.10"
     r')',
     re.I,
 )
 ERROR_MARKERS = re.compile(r'^\s*(% ?Invalid input|% ?Unknown command|% ?Authorization failed|Permission denied'
-                           r'|syntax error|invalid command|Invalid input detected)', re.I | re.M)
+                           r'|syntax error|invalid command|Invalid input detected'
+                           # MikroTik RouterOS
+                           r'|bad command name|expected end of command|expected command name|failure:|no such item'
+                           r'|input does not match any value|invalid value for argument|ambiguous value|missing value'
+                           r'|not enough permissions)', re.I | re.M)
 ANSI_ESCAPE = re.compile(r'\x1b\[[0-9;?]*[A-Za-z]|\x1b[()][A-Za-z0-9]')
 
 
@@ -51,11 +57,8 @@ class BackupError(Exception):
 
 
 def profile_for(device):
-    vendor = (device.vendor.name if device.vendor_id else '').lower()
-    for keywords, pager_commands, command in VENDOR_PROFILES:
-        if any(k in vendor for k in keywords):
-            return pager_commands, command
-    return DEFAULT_PROFILE
+    """(pager commands, config commands to try in order) for the device's platform."""
+    return VENDOR_PROFILES.get(platforms.platform_for(device), DEFAULT_PROFILE)
 
 
 def clean_config(text):
@@ -127,17 +130,25 @@ def strip_shell_noise(text, command):
 
 
 async def fetch_config(device):
-    pager_commands, command = profile_for(device)
-    conn = await ssh.connect(device)
+    pager_commands, commands = profile_for(device)
+    conn = await ssh.connect(device, automation=True)
     try:
-        try:
-            config = clean_config(await run_exec(conn, command))
-            return validate(config, command)
-        except (BackupError, asyncssh.Error) as exc:
-            # Some devices (e.g. HPE ProCurve) don't support exec channels; retry through a shell
-            logger.info('Backup of %s: exec failed (%s), retrying in an interactive shell', device.hostname, exc)
-            config = clean_config(await run_interactive(conn, pager_commands, command))
-            return validate(config, command)
+        last_error = None
+        for command in commands:
+            try:
+                config = clean_config(await run_exec(conn, command))
+                return validate(config, command)
+            except (BackupError, asyncssh.Error) as exc:
+                last_error = exc
+                logger.info('Backup of %s: "%s" over exec failed (%s)', device.hostname, command, exc)
+        # Some devices (e.g. HPE ProCurve) don't support exec channels; retry through a shell
+        for command in commands:
+            try:
+                config = clean_config(await run_interactive(conn, pager_commands, command))
+                return validate(config, command)
+            except BackupError as exc:
+                last_error = exc
+        raise last_error if isinstance(last_error, BackupError) else BackupError(f'SSH error: {last_error}')
     finally:
         conn.close()
 

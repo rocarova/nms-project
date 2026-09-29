@@ -126,9 +126,16 @@
                     </li>
                     <li>
                         <span class="step">2</span>
-                        <div><strong>Send syslog</strong> to this server so config changes show up on the dashboard:
-                            <pre class="snippet">logging host {{ server_ip }}{% if system_settings.syslog_port != 514 %} transport udp port {{ system_settings.syslog_port }}{% endif %}
+                        <div><strong>Send syslog</strong> to this server so config changes show up on the dashboard.
+                            <div class="small text-muted-nms mt-2">Cisco / Arista / Aruba</div>
+                            <pre class="snippet mt-1">logging host {{ server_ip }}{% if system_settings.syslog_port != 514 %} transport udp port {{ system_settings.syslog_port }}{% endif %}
 logging trap informational</pre>
+                            <div class="small text-muted-nms mt-2">MikroTik RouterOS</div>
+                            <pre class="snippet mt-1">/system logging action set [find name=remote] remote={{ server_ip }} remote-port={{ system_settings.syslog_port }}
+/system logging add topics=info action=remote
+/system logging add topics=warning action=remote
+/system logging add topics=error action=remote
+/system logging add topics=critical action=remote</pre>
                         </div>
                     </li>
                     <li>

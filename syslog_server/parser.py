@@ -18,7 +18,8 @@ CONFIG_CHANGE_RE = re.compile(
     r'|%VSHD-\d-VSHD_SYSLOG_CONFIG_I'
     r'|UI_COMMIT'                 # Juniper Junos
     r'|configuration (?:was )?changed'  # Aruba, HPE, generic
-    r'|running-config (?:was )?(?:changed|modified)',
+    r'|running-config (?:was )?(?:changed|modified)'
+    r'|\b(?:added|changed|removed|moved) by [\w.@-]+',  # MikroTik RouterOS, e.g. "address added by admin"
     re.I,
 )
 

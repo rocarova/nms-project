@@ -20,6 +20,24 @@ Built with Django 5.2 (LTS), Channels/Daphne and PostgreSQL.
 | **Settings** | Change password, syslog port and retention, backup schedule and retention, SMTP server and notification settings. |
 | **HTTPS certificate** | Settings -> Certificate: generate a private key and CSR, download it for your CA, and install the signed certificate (PEM, DER or PKCS#7, chain included). Self-signed certificates for a quick start. The private key never leaves the server; nginx reloads automatically. |
 
+## Supported platforms
+
+The vendor name you give a device picks how NetOps Center talks to it (Settings aren't needed):
+
+| Vendor name contains | Backups | Pushes |
+|---|---|---|
+| *(anything else, e.g. Cisco)* | `show running-config` | `configure terminal` ... `end`, save with `write memory` |
+| Nexus / NX-OS | `show running-config` | config mode, save with `copy running-config startup-config` |
+| Arista | `show running-config` | config mode, `write memory` |
+| Juniper / Junos | `show configuration` | `configure` ... `commit and-quit`; `rollback 0` if a line is rejected |
+| Aruba / ProCurve / HPE | `show running-config` | config mode, `write memory` |
+| MikroTik / RouterOS | `/export terse` (falls back to `/export`) | commands sent as written (no config mode; RouterOS saves immediately) |
+| Fortinet / FortiGate | `show` | commands sent as written (`config ... end` blocks in the script) |
+
+MikroTik automation logs in as `<user>+cet511w4098h` (RouterOS login options for plain, unpaged output); the
+interactive SSH console uses the normal login. RouterOS config changes in syslog (`... added/changed/removed by
+<user>`) count as configuration changes on the dashboard.
+
 ## Architecture
 
 ```

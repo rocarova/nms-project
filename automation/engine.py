@@ -12,7 +12,7 @@ from django.utils import timezone
 
 from backups.collector import ANSI_ESCAPE, ERROR_MARKERS, backup_device
 from backups.models import ConfigBackup
-from inventory import ssh
+from inventory import platforms, ssh
 from .models import MODE_CONFIG, PushJob, PushResult
 
 logger = logging.getLogger(__name__)
@@ -74,23 +74,21 @@ class Profile:
 
 
 IOS = Profile('configure terminal', 'end', ['end'], 'write memory', ['terminal length 0'])
-PROFILES = [
-    (('juniper', 'junos'), Profile('configure', 'commit and-quit', ['rollback 0', 'exit configuration-mode'], '',
-                                   ['set cli screen-length 0'])),
-    (('nexus', 'nx-os', 'nxos'), Profile('configure terminal', 'end', ['end'], 'copy running-config startup-config',
-                                         ['terminal length 0'])),
-    (('aruba', 'procurve', 'hpe', 'hewlett'), Profile('configure terminal', 'end', ['end'], 'write memory', ['no page'])),
-    (('mikrotik', 'routeros'), Profile()),   # No configuration mode; changes are saved immediately
-    (('fortinet', 'fortigate'), Profile()),  # "config ... end" blocks go in the script itself
-]
+PROFILES = {
+    platforms.JUNOS: Profile('configure', 'commit and-quit', ['rollback 0', 'exit configuration-mode'], '',
+                             ['set cli screen-length 0']),
+    platforms.NXOS: Profile('configure terminal', 'end', ['end'], 'copy running-config startup-config',
+                            ['terminal length 0']),
+    platforms.ARUBA: Profile('configure terminal', 'end', ['end'], 'write memory', ['no page']),
+    # RouterOS: no configuration mode, every command takes effect and is saved immediately; the login
+    # options (see inventory.platforms) already give an unpaged, uncoloured terminal
+    platforms.MIKROTIK: Profile(),
+    platforms.FORTINET: Profile(),  # "config ... end" blocks go in the script itself
+}
 
 
 def profile_for(device):
-    vendor = str(device.vendor).lower() if device.vendor_id else ''
-    for keywords, profile in PROFILES:
-        if any(k in vendor for k in keywords):
-            return profile
-    return IOS  # Cisco IOS/IOS-XE, Arista and most others
+    return PROFILES.get(platforms.platform_for(device), IOS)  # Cisco IOS/IOS-XE, Arista and most others
 
 
 # --- Device session --------------------------------------------------------------------------
@@ -142,7 +140,7 @@ def rejection(output, line):
 async def push_to_device(device, lines, mode, save):
     """Runs the commands on one device. Returns (transcript, error, saved); error is '' on success."""
     profile = profile_for(device)
-    conn = await ssh.connect(device)
+    conn = await ssh.connect(device, automation=True)
     transcript = []
     error = ''
     saved = False

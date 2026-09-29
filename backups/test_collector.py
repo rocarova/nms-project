@@ -59,11 +59,9 @@ class CleanConfigTests(SimpleTestCase):
             collector.validate('end\n', 'show running-config')
 
     def test_vendor_profiles(self):
-        device = mock.Mock(vendor_id=1)
-        for vendor, command in [('Juniper', 'show configuration | no-more'), ('Cisco', 'show running-config'),
-                                ('Aruba', 'show running-config'), ('MikroTik', '/export')]:
-            device.vendor.name = vendor
-            self.assertEqual(collector.profile_for(device)[1], command, vendor)
+        for vendor, commands in [('Juniper', ['show configuration | no-more']), ('Cisco', ['show running-config']),
+                                 ('Aruba', ['show running-config']), ('MikroTik', ['/export terse', '/export'])]:
+            self.assertEqual(collector.profile_for(mock.Mock(vendor_id=1, vendor=vendor))[1], commands, vendor)
 
 
 class BackupDeviceTests(TestCase):
