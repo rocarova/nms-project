@@ -19,9 +19,27 @@ sudo apt install -y python3 python3-venv python3-dev git postgresql nginx \
 
 ```bash
 sudo useradd --system --home /opt/nms --shell /usr/sbin/nologin nms
-sudo git clone https://github.com/<you>/<repo>.git /opt/nms
-sudo chown -R nms:nms /opt/nms
+sudo install -d -o nms -g nms /opt/nms
 ```
+
+**Private repository:** give the server a read-only *deploy key* (it can only read this one repository):
+
+```bash
+sudo install -d -o nms -g nms -m 700 /etc/nms
+sudo -u nms ssh-keygen -t ed25519 -N '' -C "nms-server deploy key" -f /etc/nms/deploy_key
+sudo cat /etc/nms/deploy_key.pub
+```
+
+Add the printed key on GitHub: repository → **Settings → Deploy keys → Add deploy key** (leave
+*Allow write access* unticked). Then clone with it; the key is remembered for future `git pull`s:
+
+```bash
+export GIT_SSH_COMMAND="ssh -i /etc/nms/deploy_key -o IdentitiesOnly=yes -o UserKnownHostsFile=/etc/nms/known_hosts -o StrictHostKeyChecking=accept-new"
+sudo -u nms --preserve-env=GIT_SSH_COMMAND git clone git@github.com:<you>/<repo>.git /opt/nms
+sudo -u nms git -C /opt/nms config core.sshCommand "$GIT_SSH_COMMAND"
+```
+
+**Public repository:** `sudo -u nms git clone https://github.com/<you>/<repo>.git /opt/nms`
 
 ## 3. Python environment
 
